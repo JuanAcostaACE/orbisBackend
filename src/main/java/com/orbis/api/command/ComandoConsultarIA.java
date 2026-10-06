@@ -1,6 +1,6 @@
-package com.smartcane.api.command;
+package com.orbis.api.command;
 
-import com.smartcane.api.facade.VisionFacade;
+import com.orbis.api.facade.VisionFacade;
 
 import java.util.List;
 

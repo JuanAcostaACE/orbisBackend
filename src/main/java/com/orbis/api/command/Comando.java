@@ -1,4 +1,4 @@
-package com.smartcane.api.command;
+package com.orbis.api.command;
 
 /**
  * Patrón Command — Interfaz genérica del Command.

@@ -1,7 +1,7 @@
-package com.smartcane.api.command;
+package com.orbis.api.command;
 
-import com.smartcane.api.model.RegistroEvento;
-import com.smartcane.api.repository.RegistroEventoRepository;
+import com.orbis.api.model.RegistroEvento;
+import com.orbis.api.repository.RegistroEventoRepository;
 
 /**
  * Patrón Command — Comando concreto: Guardar evento.
