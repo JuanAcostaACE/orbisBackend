@@ -1,4 +1,4 @@
-package com.smartcane.api;
+package com.orbis.api;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
