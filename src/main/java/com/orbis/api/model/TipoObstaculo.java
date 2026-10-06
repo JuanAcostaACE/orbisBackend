@@ -1,4 +1,4 @@
-package com.smartcane.api.model;
+package com.orbis.api.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
