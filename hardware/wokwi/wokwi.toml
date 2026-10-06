@@ -1,0 +1,15 @@
+[wokwi]
+version = 1
+firmware = 'sketch.ino'
+elf = 'sketch.elf'
+
+# Librerías necesarias para el firmware SmartCane
+# Instrucciones: En Wokwi, este archivo va junto a diagram.json y sketch.ino
+[[lib]]
+name = "ArduinoJson"    # Para serializar el JSON del POST al backend
+
+[[lib]]
+name = "WiFi"           # WiFi nativo del ESP32 (ya incluido en el core)
+
+[[lib]]
+name = "HTTPClient"     # Para hacer peticiones HTTP al backend
