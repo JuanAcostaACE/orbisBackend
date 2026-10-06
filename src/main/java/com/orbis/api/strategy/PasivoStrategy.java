@@ -1,10 +1,10 @@
-package com.smartcane.api.strategy;
+package com.orbis.api.strategy;
 
-import com.smartcane.api.command.ComandoGuardarEvento;
-import com.smartcane.api.command.EjecutorComando;
-import com.smartcane.api.model.RegistroEvento;
-import com.smartcane.api.observer.EventoRegistradoEvent;
-import com.smartcane.api.repository.RegistroEventoRepository;
+import com.orbis.api.command.ComandoGuardarEvento;
+import com.orbis.api.command.EjecutorComando;
+import com.orbis.api.model.RegistroEvento;
+import com.orbis.api.observer.EventoRegistradoEvent;
+import com.orbis.api.repository.RegistroEventoRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
