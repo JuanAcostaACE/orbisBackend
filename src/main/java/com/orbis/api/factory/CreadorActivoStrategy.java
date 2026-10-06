@@ -1,10 +1,10 @@
-package com.smartcane.api.factory;
+package com.orbis.api.factory;
 
-import com.smartcane.api.command.EjecutorComando;
-import com.smartcane.api.facade.VisionFacade;
-import com.smartcane.api.repository.RegistroEventoRepository;
-import com.smartcane.api.strategy.ActivoStrategy;
-import com.smartcane.api.strategy.ModoProcesamientoStrategy;
+import com.orbis.api.command.EjecutorComando;
+import com.orbis.api.facade.VisionFacade;
+import com.orbis.api.repository.RegistroEventoRepository;
+import com.orbis.api.strategy.ActivoStrategy;
+import com.orbis.api.strategy.ModoProcesamientoStrategy;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 

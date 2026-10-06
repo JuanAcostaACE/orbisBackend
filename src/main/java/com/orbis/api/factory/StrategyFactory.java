@@ -1,6 +1,6 @@
-package com.smartcane.api.factory;
+package com.orbis.api.factory;
 
-import com.smartcane.api.strategy.ModoProcesamientoStrategy;
+import com.orbis.api.strategy.ModoProcesamientoStrategy;
 import org.springframework.stereotype.Component;
 
 /**

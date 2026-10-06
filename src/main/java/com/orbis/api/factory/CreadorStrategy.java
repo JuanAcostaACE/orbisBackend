@@ -1,7 +1,7 @@
-package com.smartcane.api.factory;
+package com.orbis.api.factory;
 
-import com.smartcane.api.model.RegistroEvento;
-import com.smartcane.api.strategy.ModoProcesamientoStrategy;
+import com.orbis.api.model.RegistroEvento;
+import com.orbis.api.strategy.ModoProcesamientoStrategy;
 
 /**
  * Patrón Factory Method — Creator abstracto.
