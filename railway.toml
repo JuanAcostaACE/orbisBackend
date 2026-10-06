@@ -1,17 +1,14 @@
 [build]
 builder = "NIXPACKS"
 
-[build.nixpacksPlan.variables]
-JAVA_VERSION = "21"
-
 [deploy]
 startCommand = "java -jar target/*.jar"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
-# Variables que debes configurar en Railway Dashboard > Variables:
+# Variables requeridas en Railway Dashboard > orbisBackend > Variables:
+# NIXPACKS_JDK_VERSION   = 21          <-- CRITICO: define la version de Java
 # SPRING_PROFILES_ACTIVE = prod
-# DB_URL                 = jdbc:postgresql://<PGHOST>:<PGPORT>/<PGDATABASE>
-# DB_USERNAME            = <PGUSER>
-# DB_PASSWORD            = <PGPASSWORD>
-# PORT                   (Railway lo inyecta automaticamente, no tocar)
+# DB_URL                 = jdbc:postgresql://HOST:PORT/DB
+# DB_USERNAME            = postgres
+# DB_PASSWORD            = tu-password
