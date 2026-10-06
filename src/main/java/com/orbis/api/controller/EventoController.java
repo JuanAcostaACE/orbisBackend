@@ -1,7 +1,7 @@
-package com.smartcane.api.controller;
+package com.orbis.api.controller;
 
-import com.smartcane.api.model.RegistroEvento;
-import com.smartcane.api.service.EventoService;
+import com.orbis.api.model.RegistroEvento;
+import com.orbis.api.service.EventoService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

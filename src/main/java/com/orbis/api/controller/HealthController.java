@@ -1,4 +1,4 @@
-package com.smartcane.api.controller;
+package com.orbis.api.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,7 +22,7 @@ public class HealthController {
     public ResponseEntity<Map<String, Object>> health() {
         return ResponseEntity.ok(Map.of(
                 "status",    "UP",
-                "servicio",  "SmartCane AI Backend",
+                "servicio",  "ORBIS Backend",
                 "timestamp", LocalDateTime.now().toString()
         ));
     }

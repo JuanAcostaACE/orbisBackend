@@ -1,4 +1,4 @@
-package com.smartcane.api.controller;
+package com.orbis.api.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
