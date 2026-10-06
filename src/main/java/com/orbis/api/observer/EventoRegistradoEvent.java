@@ -1,6 +1,6 @@
-package com.smartcane.api.observer;
+package com.orbis.api.observer;
 
-import com.smartcane.api.model.RegistroEvento;
+import com.orbis.api.model.RegistroEvento;
 import org.springframework.context.ApplicationEvent;
 
 /**

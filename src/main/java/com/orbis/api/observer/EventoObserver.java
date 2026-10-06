@@ -1,4 +1,4 @@
-package com.smartcane.api.observer;
+package com.orbis.api.observer;
 
 /**
  * Patrón Observer — Interfaz del Observer.
