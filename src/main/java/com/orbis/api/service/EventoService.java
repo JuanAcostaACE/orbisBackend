@@ -1,10 +1,10 @@
-package com.smartcane.api.service;
+package com.orbis.api.service;
 
-import com.smartcane.api.factory.StrategyFactory;
-import com.smartcane.api.model.RegistroEvento;
-import com.smartcane.api.repository.RegistroEventoRepository;
-import com.smartcane.api.state.ContextoSistema;
-import com.smartcane.api.strategy.ModoProcesamientoStrategy;
+import com.orbis.api.factory.StrategyFactory;
+import com.orbis.api.model.RegistroEvento;
+import com.orbis.api.repository.RegistroEventoRepository;
+import com.orbis.api.state.ContextoSistema;
+import com.orbis.api.strategy.ModoProcesamientoStrategy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
