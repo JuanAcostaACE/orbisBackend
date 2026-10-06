@@ -31,3 +31,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Secretos — NUNCA subir
+*.json.key
+gcp-key.json
+*.credentials.json
+.env
+.env.*
+
