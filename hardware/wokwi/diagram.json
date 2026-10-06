@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "author": "SmartCane AI",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp32",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "ultrasonico",
+      "top": -100,
+      "left": 200,
+      "attrs": { "distance": "150" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "boton",
+      "top": 150,
+      "left": 220,
+      "attrs": { "color": "green" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledEstado",
+      "top": 150,
+      "left": 320,
+      "attrs": { "color": "blue" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledVibrador",
+      "top": 80,
+      "left": 320,
+      "attrs": { "color": "red" }
+    }
+  ],
+  "connections": [
+    ["esp32:D5",  "ultrasonico:TRIG", "green", []],
+    ["esp32:D18", "ultrasonico:ECHO", "orange", []],
+    ["ultrasonico:VCC", "esp32:3V3", "red", []],
+    ["ultrasonico:GND", "esp32:GND", "black", []],
+
+    ["esp32:D4",  "boton:1.l", "blue", []],
+    ["boton:2.l", "esp32:GND", "black", []],
+
+    ["esp32:D2",  "ledVibrador:A", "red", []],
+    ["ledVibrador:K", "esp32:GND", "black", []],
+
+    ["esp32:D13", "ledEstado:A", "blue", []],
+    ["ledEstado:K", "esp32:GND", "black", []]
+  ],
+  "dependencies": {}
+}

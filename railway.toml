@@ -1,0 +1,14 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "java -jar target/*.jar"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Variables de entorno requeridas en Railway Dashboard:
+# DB_URL      = jdbc:postgresql://[host-supabase]:6543/postgres
+# DB_USERNAME = postgres.[nombre-proyecto]
+# DB_PASSWORD = [tu-password-supabase]
+# GOOGLE_APPLICATION_CREDENTIALS_JSON = [contenido del JSON de Service Account, en una sola línea]
+# PORT        = 8080 (Railway lo inyecta automáticamente)
