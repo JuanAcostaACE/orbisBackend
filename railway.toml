@@ -1,5 +1,6 @@
 [build]
 builder = "NIXPACKS"
+buildCommand = "chmod +x ./mvnw && ./mvnw -Dmaven.test.skip=true -B clean install"
 
 [deploy]
 startCommand = "java -jar target/*.jar"
@@ -7,7 +8,7 @@ restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
 # Variables requeridas en Railway Dashboard > orbisBackend > Variables:
-# NIXPACKS_JDK_VERSION   = 21          <-- CRITICO: define la version de Java
+# NIXPACKS_JDK_VERSION   = 21
 # SPRING_PROFILES_ACTIVE = prod
 # DB_URL                 = jdbc:postgresql://HOST:PORT/DB
 # DB_USERNAME            = postgres
