@@ -1,6 +1,6 @@
-package com.smartcane.api.state;
+package com.orbis.api.state;
 
-import com.smartcane.api.model.RegistroEvento;
+import com.orbis.api.model.RegistroEvento;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
