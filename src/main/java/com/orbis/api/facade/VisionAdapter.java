@@ -1,4 +1,4 @@
-package com.smartcane.api.facade;
+package com.orbis.api.facade;
 
 import com.google.cloud.vision.v1.*;
 import com.google.protobuf.ByteString;

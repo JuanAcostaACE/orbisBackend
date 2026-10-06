@@ -1,4 +1,4 @@
-package com.smartcane.api.facade;
+package com.orbis.api.facade;
 
 /**
  * Excepción específica del Facade de Vision.
