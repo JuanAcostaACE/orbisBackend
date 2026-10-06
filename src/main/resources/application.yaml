@@ -1,24 +1,21 @@
-server:
+﻿server:
   port: ${PORT:8080}
 
 spring:
-  # ──────────────────────────────────────────
-  # Perfil por defecto: H2 en memoria (para desarrollo local sin DB real)
-  # Para producción, las variables de entorno reemplazan estos valores.
-  # ──────────────────────────────────────────
+  # Perfil default: H2 en memoria (sin DB externa, para desarrollo local)
   datasource:
-    url: ${DB_URL:jdbc:h2:mem:smartcane;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
+    url: ${DB_URL:jdbc:h2:mem:orbis;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
     username: ${DB_USERNAME:sa}
     password: ${DB_PASSWORD:}
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
   h2:
     console:
-      enabled: true         # Acceder en: http://localhost:8080/h2-console
+      enabled: true
       path: /h2-console
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: create-drop  # En H2: crea tablas al iniciar, las borra al parar
+      ddl-auto: create-drop
     show-sql: true
     properties:
       hibernate:
@@ -26,10 +23,8 @@ spring:
         format_sql: true
 
 ---
-# ══════════════════════════════════════════
 # PERFIL: prod (Railway + PostgreSQL)
-# Activar con variable de entorno: SPRING_PROFILES_ACTIVE=prod
-# ══════════════════════════════════════════
+# Activar con: SPRING_PROFILES_ACTIVE=prod en Railway Dashboard
 spring:
   config:
     activate:
