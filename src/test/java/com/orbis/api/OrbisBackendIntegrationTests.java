@@ -1,7 +1,5 @@
 package com.orbis.api;
 
-import com.orbis.api.model.RegistroEvento;
-import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,43 +16,47 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrbisBackendIntegrationTests {
 
     @Autowired private MockMvc mockMvc;
-    @Autowired private ObjectMapper objectMapper;
 
     @Test @DisplayName("POST PASIVO -> 200")
     void postPasivo() throws Exception {
-        RegistroEvento r = new RegistroEvento();
-        r.setModo("PASIVO"); r.setDistanciaCm(35.0);
-        mockMvc.perform(post("/api/v1/eventos").contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(r)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.id").exists());
+        String body = "{\"modo\":\"PASIVO\",\"distanciaCm\":35.0}";
+        mockMvc.perform(post("/api/v1/eventos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").exists());
     }
 
     @Test @DisplayName("POST ACTIVO sin imagen -> SIN_IMAGEN")
     void postActivo() throws Exception {
-        RegistroEvento r = new RegistroEvento();
-        r.setModo("ACTIVO"); r.setDistanciaCm(28.0);
-        mockMvc.perform(post("/api/v1/eventos").contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(r)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.etiquetasIA").value("SIN_IMAGEN"));
+        String body = "{\"modo\":\"ACTIVO\",\"distanciaCm\":28.0}";
+        mockMvc.perform(post("/api/v1/eventos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.etiquetasIA").value("SIN_IMAGEN"));
     }
 
     @Test @DisplayName("Modo invalido -> 400")
     void postInvalido() throws Exception {
-        RegistroEvento r = new RegistroEvento(); r.setModo("X");
-        mockMvc.perform(post("/api/v1/eventos").contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(r)))
+        String body = "{\"modo\":\"X\"}";
+        mockMvc.perform(post("/api/v1/eventos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
                 .andExpect(status().isBadRequest());
     }
 
     @Test @DisplayName("GET /eventos/estado -> State pattern")
     void getEstado() throws Exception {
-        mockMvc.perform(get("/api/v1/eventos/estado")).andExpect(status().isOk())
+        mockMvc.perform(get("/api/v1/eventos/estado"))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estadoActual").exists());
     }
 
     @Test @DisplayName("GET /health -> UP")
     void health() throws Exception {
-        mockMvc.perform(get("/health")).andExpect(status().isOk())
+        mockMvc.perform(get("/health"))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
     }
 }
