@@ -11,20 +11,21 @@ import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
- * Patron Adapter - Hugging Face BLIP Image Captioning (gratuito)
- * Modelo: Salesforce/blip-image-captioning-base
+ * Patron Adapter - Hugging Face Image Classification (gratuito)
+ * Modelo: microsoft/resnet-50 — rapido, siempre activo en HF free tier
  * Variable requerida en Railway: HUGGINGFACE_TOKEN = hf_xxx...
  */
 @Component
 public class VisionAdapter implements VisionFacade {
 
     private static final String HF_URL =
-        "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base";
+        "https://api-inference.huggingface.co/models/microsoft/resnet-50";
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
+            .connectTimeout(Duration.ofSeconds(15))
             .build();
 
     @Override
@@ -46,29 +47,31 @@ public class VisionAdapter implements VisionFacade {
         byte[] imagenBytes;
         try {
             imagenBytes = Base64.getDecoder().decode(base64Limpio.trim());
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             throw new VisionException("Imagen Base64 invalida: " + e.getClass().getSimpleName());
         }
 
         try {
-            HttpResponse<String> response = llamarHuggingFace(token, imagenBytes);
+            HttpResponse<String> response = llamarAPI(token.trim(), imagenBytes);
 
-            // Retry si modelo esta cargando (cold start 503)
+            // Retry si modelo esta cargando (503 cold start)
             if (response.statusCode() == 503) {
-                Thread.sleep(4000);
-                response = llamarHuggingFace(token, imagenBytes);
+                Thread.sleep(5000);
+                response = llamarAPI(token.trim(), imagenBytes);
             }
 
+            if (response.statusCode() == 401) {
+                throw new VisionException("Token de Hugging Face invalido (HTTP 401) - verifique HUGGINGFACE_TOKEN");
+            }
             if (response.statusCode() != 200) {
-                String body = response.body() != null ? response.body().substring(0, Math.min(200, response.body().length())) : "sin body";
+                String body = response.body() != null
+                    ? response.body().substring(0, Math.min(150, response.body().length()))
+                    : "sin respuesta";
                 throw new VisionException("Hugging Face HTTP " + response.statusCode() + ": " + body);
             }
 
-            String descripcion = extraerTexto(response.body());
-            if (descripcion == null || descripcion.isBlank()) {
-                return List.of("Imagen analizada sin etiquetas");
-            }
-            return List.of(capitalizar(descripcion));
+            List<String> etiquetas = extraerEtiquetas(response.body());
+            return etiquetas.isEmpty() ? List.of("Objeto detectado") : etiquetas;
 
         } catch (VisionException e) {
             throw e;
@@ -76,32 +79,46 @@ public class VisionAdapter implements VisionFacade {
             Thread.currentThread().interrupt();
             throw new VisionException("Llamada a Hugging Face interrumpida");
         } catch (Exception e) {
-            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            throw new VisionException("Error Hugging Face: " + msg);
+            String tipo = e.getClass().getSimpleName();
+            String msg  = e.getMessage() != null ? e.getMessage() : "sin detalle";
+            throw new VisionException("Error " + tipo + ": " + msg);
         }
     }
 
-    private HttpResponse<String> llamarHuggingFace(String token, byte[] bytes) throws Exception {
+    private HttpResponse<String> llamarAPI(String token, byte[] bytes) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(HF_URL))
-                .header("Authorization", "Bearer " + token.trim())
+                .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/octet-stream")
                 .POST(HttpRequest.BodyPublishers.ofByteArray(bytes))
-                .timeout(Duration.ofSeconds(60))
+                .timeout(Duration.ofSeconds(30))
                 .build();
         return HTTP.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private String extraerTexto(String json) {
-        if (json == null) return null;
-        Pattern p = Pattern.compile("\"generated_text\"\\s*:\\s*\"([^\"]+)\"");
+    /**
+     * Extrae etiquetas del JSON de resnet-50:
+     * [{"score":0.99,"label":"tabby cat"},{"score":0.8,"label":"tiger cat"},...]
+     */
+    private List<String> extraerEtiquetas(String json) {
+        List<String> result = new java.util.ArrayList<>();
+        Pattern p = Pattern.compile("\"label\"\\s*:\\s*\"([^\"]+)\"");
         Matcher m = p.matcher(json);
-        if (m.find()) return m.group(1);
-        return json.replaceAll("[\\[\\]{}\"]", "").trim();
+        int count = 0;
+        while (m.find() && count < 3) {
+            String label = m.group(1);
+            // Limpiar labels compuestas tipo "tabby, tabby cat" -> "tabby cat"
+            if (label.contains(",")) {
+                label = label.substring(label.lastIndexOf(",") + 1).trim();
+            }
+            result.add(capitalize(label));
+            count++;
+        }
+        return result;
     }
 
-    private String capitalizar(String texto) {
-        if (texto == null || texto.isBlank()) return texto;
-        return Character.toUpperCase(texto.charAt(0)) + texto.substring(1);
+    private String capitalize(String s) {
+        if (s == null || s.isBlank()) return s;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 }
