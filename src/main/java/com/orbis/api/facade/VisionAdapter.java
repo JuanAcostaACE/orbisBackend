@@ -1,31 +1,37 @@
 package com.orbis.api.facade;
 
-import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.vision.v1.*;
-import com.google.protobuf.ByteString;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Patron Adapter:
- * Adapta la API de Google Cloud Vision al contrato definido por VisionFacade.
+ * Patron Adapter — Hugging Face BLIP Image Captioning
  *
- * Credenciales (en orden de prioridad):
- *   1. Variable de entorno GOOGLE_CREDENTIALS_JSON  → contenido JSON directo (Railway/Docker)
- *   2. Variable de entorno GOOGLE_APPLICATION_CREDENTIALS → ruta al archivo JSON (local)
+ * Modelo: Salesforce/blip-image-captioning-base
+ * - Gratuito, sin limite estricto para uso academico
+ * - Genera descripciones en lenguaje natural: "a chair next to a wall"
+ * - Ideal para tecnologia asistiva (descripcion verbal de obstaculos)
  *
- * Para Railway: copiar el contenido completo del archivo service-account.json
- * en la variable de entorno GOOGLE_CREDENTIALS_JSON del servicio orbisBackend.
+ * Configuracion en Railway:
+ *   HUGGINGFACE_TOKEN = hf_xxxxxxxxxxxxxxxxxx
  */
 @Component
 public class VisionAdapter implements VisionFacade {
 
-    private static final int MAX_RESULTADOS = 10;
+    private static final String HF_URL =
+        "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base";
+
+    private static final HttpClient HTTP = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
 
     @Override
     public List<String> analizarImagen(String imagenBase64) {
@@ -33,66 +39,68 @@ public class VisionAdapter implements VisionFacade {
             throw new VisionException("La imagen no puede estar vacia");
         }
 
+        String token = System.getenv("HUGGINGFACE_TOKEN");
+        if (token == null || token.isBlank()) {
+            throw new VisionException("Variable HUGGINGFACE_TOKEN no configurada en Railway");
+        }
+
+        // Limpiar prefijo data:image/...;base64,
         String base64Limpio = imagenBase64.contains(",")
                 ? imagenBase64.split(",")[1]
                 : imagenBase64;
 
-        try (ImageAnnotatorClient cliente = crearCliente()) {
+        try {
+            byte[] imagenBytes = Base64.getDecoder().decode(base64Limpio);
 
-            ByteString contenido = ByteString.copyFrom(Base64.getDecoder().decode(base64Limpio));
-            Image imagen = Image.newBuilder().setContent(contenido).build();
-
-            Feature feature = Feature.newBuilder()
-                    .setType(Feature.Type.LABEL_DETECTION)
-                    .setMaxResults(MAX_RESULTADOS)
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(HF_URL))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Content-Type", "application/octet-stream")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(imagenBytes))
+                    .timeout(Duration.ofSeconds(45))
                     .build();
 
-            AnnotateImageRequest request = AnnotateImageRequest.newBuilder()
-                    .addFeatures(feature)
-                    .setImage(imagen)
-                    .build();
+            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
 
-            BatchAnnotateImagesResponse response = cliente.batchAnnotateImages(List.of(request));
-            AnnotateImageResponse imageResponse = response.getResponsesList().get(0);
-
-            if (imageResponse.hasError()) {
-                throw new VisionException("Google Vision error: " + imageResponse.getError().getMessage());
+            if (response.statusCode() == 503) {
+                // Modelo cargando (cold start de Hugging Face), reintentar
+                Thread.sleep(3000);
+                response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
             }
 
-            return imageResponse.getLabelAnnotationsList().stream()
-                    .map(EntityAnnotation::getDescription)
-                    .collect(Collectors.toList());
+            if (response.statusCode() != 200) {
+                throw new VisionException("Hugging Face respondio con error " + response.statusCode()
+                        + ": " + response.body());
+            }
+
+            String descripcion = extraerTexto(response.body());
+            return List.of(descripcion);
 
         } catch (VisionException e) {
             throw e;
         } catch (IllegalArgumentException e) {
             throw new VisionException("Imagen Base64 invalida", e);
         } catch (Exception e) {
-            throw new VisionException("Error al conectar con Google Cloud Vision: " + e.getMessage(), e);
+            throw new VisionException("Error al conectar con Hugging Face: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Crea el cliente de Vision con credenciales desde env var JSON (Railway)
-     * o desde el archivo en GOOGLE_APPLICATION_CREDENTIALS (local).
+     * Extrae el texto generado del JSON de respuesta.
+     * Formato esperado: [{"generated_text":"a person sitting on a chair"}]
      */
-    private ImageAnnotatorClient crearCliente() throws Exception {
-        String credJson = System.getenv("GOOGLE_CREDENTIALS_JSON");
-
-        if (credJson != null && !credJson.isBlank()) {
-            // Railway: credenciales como contenido JSON en variable de entorno
-            GoogleCredentials credentials = GoogleCredentials
-                    .fromStream(new ByteArrayInputStream(credJson.getBytes(StandardCharsets.UTF_8)))
-                    .createScoped("https://www.googleapis.com/auth/cloud-platform");
-
-            ImageAnnotatorSettings settings = ImageAnnotatorSettings.newBuilder()
-                    .setCredentialsProvider(() -> credentials)
-                    .build();
-
-            return ImageAnnotatorClient.create(settings);
+    private String extraerTexto(String json) {
+        Pattern p = Pattern.compile("\"generated_text\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher m = p.matcher(json);
+        if (m.find()) {
+            return capitalizar(m.group(1));
         }
+        // Fallback: devolver el JSON completo si no hay match
+        return json.replaceAll("[\\[\\]{}\"]", "").trim();
+    }
 
-        // Local: usa GOOGLE_APPLICATION_CREDENTIALS (archivo JSON)
-        return ImageAnnotatorClient.create();
+    private String capitalizar(String texto) {
+        if (texto == null || texto.isBlank()) return texto;
+        return Character.toUpperCase(texto.charAt(0)) + texto.substring(1);
     }
 }
