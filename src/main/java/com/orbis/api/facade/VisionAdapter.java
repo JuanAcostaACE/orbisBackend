@@ -13,15 +13,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Patron Adapter — Hugging Face BLIP Image Captioning
- *
+ * Patron Adapter - Hugging Face BLIP Image Captioning (gratuito)
  * Modelo: Salesforce/blip-image-captioning-base
- * - Gratuito, sin limite estricto para uso academico
- * - Genera descripciones en lenguaje natural: "a chair next to a wall"
- * - Ideal para tecnologia asistiva (descripcion verbal de obstaculos)
- *
- * Configuracion en Railway:
- *   HUGGINGFACE_TOKEN = hf_xxxxxxxxxxxxxxxxxx
+ * Variable requerida en Railway: HUGGINGFACE_TOKEN = hf_xxx...
  */
 @Component
 public class VisionAdapter implements VisionFacade {
@@ -49,53 +43,60 @@ public class VisionAdapter implements VisionFacade {
                 ? imagenBase64.split(",")[1]
                 : imagenBase64;
 
+        byte[] imagenBytes;
         try {
-            byte[] imagenBytes = Base64.getDecoder().decode(base64Limpio);
+            imagenBytes = Base64.getDecoder().decode(base64Limpio.trim());
+        } catch (Exception e) {
+            throw new VisionException("Imagen Base64 invalida: " + e.getClass().getSimpleName());
+        }
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(HF_URL))
-                    .header("Authorization", "Bearer " + token)
-                    .header("Content-Type", "application/octet-stream")
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(imagenBytes))
-                    .timeout(Duration.ofSeconds(45))
-                    .build();
+        try {
+            HttpResponse<String> response = llamarHuggingFace(token, imagenBytes);
 
-            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
-
+            // Retry si modelo esta cargando (cold start 503)
             if (response.statusCode() == 503) {
-                // Modelo cargando (cold start de Hugging Face), reintentar
-                Thread.sleep(3000);
-                response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+                Thread.sleep(4000);
+                response = llamarHuggingFace(token, imagenBytes);
             }
 
             if (response.statusCode() != 200) {
-                throw new VisionException("Hugging Face respondio con error " + response.statusCode()
-                        + ": " + response.body());
+                String body = response.body() != null ? response.body().substring(0, Math.min(200, response.body().length())) : "sin body";
+                throw new VisionException("Hugging Face HTTP " + response.statusCode() + ": " + body);
             }
 
             String descripcion = extraerTexto(response.body());
-            return List.of(descripcion);
+            if (descripcion == null || descripcion.isBlank()) {
+                return List.of("Imagen analizada sin etiquetas");
+            }
+            return List.of(capitalizar(descripcion));
 
         } catch (VisionException e) {
             throw e;
-        } catch (IllegalArgumentException e) {
-            throw new VisionException("Imagen Base64 invalida", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new VisionException("Llamada a Hugging Face interrumpida");
         } catch (Exception e) {
-            throw new VisionException("Error al conectar con Hugging Face: " + e.getMessage(), e);
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            throw new VisionException("Error Hugging Face: " + msg);
         }
     }
 
-    /**
-     * Extrae el texto generado del JSON de respuesta.
-     * Formato esperado: [{"generated_text":"a person sitting on a chair"}]
-     */
+    private HttpResponse<String> llamarHuggingFace(String token, byte[] bytes) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(HF_URL))
+                .header("Authorization", "Bearer " + token.trim())
+                .header("Content-Type", "application/octet-stream")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(bytes))
+                .timeout(Duration.ofSeconds(60))
+                .build();
+        return HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     private String extraerTexto(String json) {
+        if (json == null) return null;
         Pattern p = Pattern.compile("\"generated_text\"\\s*:\\s*\"([^\"]+)\"");
         Matcher m = p.matcher(json);
-        if (m.find()) {
-            return capitalizar(m.group(1));
-        }
-        // Fallback: devolver el JSON completo si no hay match
+        if (m.find()) return m.group(1);
         return json.replaceAll("[\\[\\]{}\"]", "").trim();
     }
 
