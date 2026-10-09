@@ -14,13 +14,17 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * Patrón Strategy — Implementación Activa.
- * Responsabilidad: Consultar Google Vision y guardar el resultado.
+ * Patron Strategy - Implementacion Activa.
  *
- * Integración de patrones:
- *   - Facade:   usa VisionFacade para desacoplarse de Google Cloud Vision
+ * Integracion de patrones:
+ *   - Facade:   usa VisionFacade para desacoplarse del proveedor de IA
  *   - Command:  usa ComandoConsultarIA y ComandoGuardarEvento via EjecutorComando
- *   - Observer: publica EventoRegistradoEvent después de guardar
+ *   - Observer: publica EventoRegistradoEvent despues de guardar
+ *
+ * Flujos soportados:
+ *   1. Frontend envia etiquetasIA ya calculadas (HF llamado desde el navegador) -> guardar directo
+ *   2. Frontend envia imagenUrl en Base64 -> llamar VisionFacade -> guardar
+ *   3. Ni imagen ni etiquetas -> guardar con "SIN_IMAGEN"
  */
 @Component("ACTIVO")
 public class ActivoStrategy implements ModoProcesamientoStrategy {
@@ -42,21 +46,27 @@ public class ActivoStrategy implements ModoProcesamientoStrategy {
 
     @Override
     public RegistroEvento procesar(RegistroEvento eventoRequest) {
-        String imagenBase64 = eventoRequest.getImagenUrl();
 
-        if (imagenBase64 == null || imagenBase64.isBlank()) {
-            eventoRequest.setEtiquetasIA("SIN_IMAGEN");
-        } else {
+        String etiquetasYaCalculadas = eventoRequest.getEtiquetasIA();
+        String imagenBase64          = eventoRequest.getImagenUrl();
+
+        if (etiquetasYaCalculadas != null && !etiquetasYaCalculadas.isBlank()) {
+            // Flujo 1: El frontend (navegador) ya llamo a Hugging Face y envio las etiquetas.
+            // No es necesario llamar a Vision de nuevo - conservar las etiquetas recibidas.
+
+        } else if (imagenBase64 != null && !imagenBase64.isBlank()) {
+            // Flujo 2: El frontend envio la imagen en Base64 para que el backend llame a la IA.
             try {
-                // Command: encapsula la llamada a Vision
                 ComandoConsultarIA comandoIA = new ComandoConsultarIA(visionFacade, imagenBase64);
                 List<String> etiquetas = ejecutorComando.ejecutar(comandoIA);
                 eventoRequest.setEtiquetasIA(String.join(", ", etiquetas));
-
             } catch (VisionException e) {
-                // Degradación elegante: persistir con error en lugar de perder el evento
                 eventoRequest.setEtiquetasIA("ERROR_VISION: " + e.getMessage());
             }
+
+        } else {
+            // Flujo 3: Sin imagen ni etiquetas.
+            eventoRequest.setEtiquetasIA("SIN_IMAGEN");
         }
 
         // Command: encapsula la persistencia
