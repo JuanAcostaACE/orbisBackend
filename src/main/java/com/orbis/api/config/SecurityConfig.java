@@ -12,31 +12,42 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.http.HttpMethod;
 
 /**
- * Configuración central de Spring Security.
+ * Configuración central de Spring Security para ORBIS.
  *
- * Mecanismo: sesión de servidor con cookie HttpOnly.
- *   - El servidor mantiene la sesión en memoria (H2) o en base de datos (Railway).
- *   - La cookie JSESSIONID se marca HttpOnly y Secure (en producción).
- *   - CSRF se habilita con la política cookie-to-header para SPAs
- *     (el frontend debe leer XSRF-TOKEN y enviarlo en X-XSRF-TOKEN).
+ * Mecanismo dual de autenticación:
+ *  1. Usuarios web → sesión de servidor con cookie HttpOnly (JSESSIONID).
+ *  2. Dispositivos ESP32 → header X-Device-Token (ROLE_DEVICE).
  *
- * Endpoints públicos: /auth/registro, /auth/login, /health.
- * Todos los demás requieren autenticación.
+ * Flujo de filtros (orden importante):
+ *   DeviceTokenFilter → UsernamePasswordAuthenticationFilter → ...
+ *
+ * CSRF:
+ *  - Habilitado para mutaciones de usuarios web (SPA lee XSRF-TOKEN).
+ *  - Deshabilitado para /auth/** (sin sesión previa) y /api/v1/eventos (POST del ESP32).
+ *
+ * Roles:
+ *  - ROLE_USER  → usuarios registrados (web).
+ *  - ROLE_DEVICE → dispositivos autenticados por token.
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private final OrbisUserDetailsService userDetailsService;
-    private final CorsConfigurationSource corsConfigurationSource;
+    private final OrbisUserDetailsService  userDetailsService;
+    private final CorsConfigurationSource  corsConfigurationSource;
+    private final DeviceTokenFilter        deviceTokenFilter;
 
     public SecurityConfig(OrbisUserDetailsService userDetailsService,
-                          CorsConfigurationSource corsConfigurationSource) {
-        this.userDetailsService      = userDetailsService;
+                          CorsConfigurationSource corsConfigurationSource,
+                          DeviceTokenFilter       deviceTokenFilter) {
+        this.userDetailsService     = userDetailsService;
         this.corsConfigurationSource = corsConfigurationSource;
+        this.deviceTokenFilter      = deviceTokenFilter;
     }
 
     @Bean
@@ -53,20 +64,21 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // CORS: usa el bean CorsConfigurationSource definido en CorsConfig
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
 
-            // CSRF: habilitado con cookie accesible al JS para SPA cross-origin
-            // El frontend debe leer XSRF-TOKEN y enviar X-XSRF-TOKEN en cada mutación
+            // CSRF con cookie legible por el SPA (SameSite=Strict lo maneja el navegador)
             .csrf(csrf -> csrf
                 .csrfTokenRepository(
                     org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse()
                 )
-                // Ignorar CSRF en registro y login (aún no hay sesión)
-                .ignoringRequestMatchers("/auth/**")
+                // Ignorar CSRF para:
+                //   /auth/**       → aún no hay sesión en registro/login
+                //   /api/v1/eventos POST → ESP32 usa token propio (no navegador)
+                //   /health        → endpoint de monitoreo
+                .ignoringRequestMatchers("/auth/**", "/api/v1/eventos", "/health")
             )
 
-            // Gestión de sesión
+            // Sesión solo para usuarios web (no para el dispositivo)
             .sessionManagement(sm -> sm
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 .maximumSessions(5)
@@ -74,20 +86,26 @@ public class SecurityConfig {
 
             // Autorización de rutas
             .authorizeHttpRequests(auth -> auth
+                // Endpoints públicos mínimos
                 .requestMatchers("/auth/**", "/health", "/h2-console/**").permitAll()
+                // Ingesta del ESP32: requiere ROLE_DEVICE (token) o ROLE_USER (sesión)
+                .requestMatchers(HttpMethod.POST, "/api/v1/eventos").hasAnyRole("DEVICE", "USER")
+                // Todo lo demás: solo usuarios web autenticados
                 .anyRequest().authenticated()
             )
 
-            // UserDetailsService
             .userDetailsService(userDetailsService)
 
-            // Sin redirección: respuestas 401/403 en JSON para API REST
+            // DeviceTokenFilter ANTES del filtro estándar de usuario/contraseña
+            .addFilterBefore(deviceTokenFilter, UsernamePasswordAuthenticationFilter.class)
+
+            // Respuestas 401/403 en JSON (sin redirección a login HTML)
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((req, res, e) -> {
                     res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     res.setContentType("application/json;charset=UTF-8");
                     res.getWriter().write(
-                        "{\"status\":401,\"mensaje\":\"Se requiere autenticación\"}"
+                        "{\"status\":401,\"mensaje\":\"Se requiere autenticaci\u00f3n\"}"
                     );
                 })
                 .accessDeniedHandler((req, res, e) -> {
@@ -99,7 +117,7 @@ public class SecurityConfig {
                 })
             )
 
-            // H2 console (solo en desarrollo local)
+            // H2 console: solo desarrollo local (frame embebido)
             .headers(h -> h.frameOptions(fo -> fo.sameOrigin()));
 
         return http.build();
