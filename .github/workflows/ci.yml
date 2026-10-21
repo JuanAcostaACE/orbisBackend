@@ -1,0 +1,34 @@
+name: CI — Backend
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend:
+    name: Backend tests (Java 21 + H2)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run tests (H2, sin secretos de producción)
+        run: ./mvnw -B test
+        # No se usan DB_URL ni APP_GOOGLE_CLOUD_CREDENTIALS.
+        # Spring Boot activa H2 automáticamente cuando DB_URL no está definida.
+
+      - name: Upload Surefire report (en caso de fallos)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
