@@ -1,176 +1,359 @@
 /*
- * SmartCane AI — ESP32 Maestro (Simulación Wokwi)
- * Avance 1: Wokwi → JSON → Ngrok → Spring Boot → Strategy → Supabase
+ * SmartCane AI — ESP32 (Simulación Wokwi + Hardware físico)
  *
- * INSTRUCCIONES:
- * 1. Antes de correr en Wokwi, reemplaza NGROK_URL con la URL real de Ngrok.
- *    Ejemplo: "https://abc123.ngrok-free.app"
- * 2. Las credenciales WiFi para Wokwi pueden ser cualquier cosa (usa el WiFi simulado).
- * 3. Para simular obstáculo: en Wokwi, haz clic en el sensor HC-SR04 y reduce la distancia.
- * 4. Para simular modo activo: presiona el botón verde en el diagrama.
+ * ARQUITECTURA NO-BLOQUEANTE:
+ *   El loop() nunca se detiene por WiFi ni por HTTP.
+ *   La seguridad local (vibrador) siempre responde aunque no haya Internet.
+ *
+ *   loop()
+ *    ├─ tick cada TICK_SENSOR_MS → leer distancia → vibrar si obstáculo
+ *    ├─ tick cada TICK_WIFI_MS   → verificar/reconectar WiFi
+ *    └─ tick cada TICK_HTTP_MS   → enviar evento pendiente si hay WiFi
+ *
+ * HISTÉRESIS Y COOLDOWN:
+ *   - Se reporta un evento al superar el umbral (flanco de bajada).
+ *   - No se vuelve a reportar hasta que la distancia supere UMBRAL + HISTERESIS_CM.
+ *   - Cooldown mínimo de COOLDOWN_MS entre eventos consecutivos.
+ *
+ * AUTENTICACIÓN (backend con Spring Security):
+ *   El ESP32 envía el header X-Device-Token con el valor de DEVICE_TOKEN.
+ *   El token debe almacenarse en NVS en hardware físico (no en el sketch).
+ *   Para Wokwi (simulación), se puede dejar un valor de prueba.
+ *
+ * SECRETOS:
+ *   ⚠  No incluir credenciales WiFi reales ni el token de producción en este archivo.
+ *   ⚠  Para hardware físico: cargar WiFi+Token vía NVS o archivo de configuración.
+ *   ⚠  El token embebido en el firmware puede extraerse con herramientas de dumping.
+ *
+ * COMPATIBILIDAD WOKWI:
+ *   - HTTPClient, WiFi, ArduinoJson: compatibles con Wokwi.
+ *   - FreeRTOS (xTaskCreate): compatible con Wokwi ESP32.
+ *   - NVS: NO simulado en Wokwi → usar valores constantes en simulación.
+ *   - Hardware real: reemplazar SSID/PASSWORD/DEVICE_TOKEN por lectura de NVS.
  */
 
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-// ══════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
 //  CONFIGURACIÓN — EDITAR ANTES DE CORRER
-// ══════════════════════════════════════════
-const char* SSID           = "Wokwi-GUEST";   // Red simulada de Wokwi (no cambiar en simulación)
-const char* PASSWORD       = "";               // Sin contraseña en Wokwi
-const char* NGROK_URL      = "REEMPLAZAR_CON_TU_URL_NGROK"; // ej: https://abc.ngrok-free.app
-const char* ENDPOINT       = "/api/v1/eventos";
+//  ⚠ Para producción: mover a NVS o a un archivo no versionado.
+// ══════════════════════════════════════════════════════════════════
+namespace Cfg {
+  // Red WiFi (Wokwi usa "Wokwi-GUEST" sin contraseña)
+  const char* SSID         = "Wokwi-GUEST";
+  const char* PASSWORD     = "";
 
-// ══════════════════════════════════════════
+  // URL base del backend (incluye esquema, sin slash final)
+  // Ejemplo ngrok:   "https://abc123.ngrok-free.app"
+  // Ejemplo Railway: "https://orbisbackend-production.up.railway.app"
+  const char* BACKEND_URL  = "REEMPLAZAR_CON_URL_DEL_BACKEND";
+  const char* ENDPOINT     = "/api/v1/eventos";
+
+  // Token de dispositivo. Debe coincidir con APP_DEVICE_TOKEN en Railway.
+  // ⚠ En hardware físico: leer de NVS, nunca dejar el valor real en el sketch.
+  const char* DEVICE_TOKEN = "TOKEN_DE_PRUEBA_CAMBIAR_EN_PRODUCCION";
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  PINES
-// ══════════════════════════════════════════
-const int PIN_TRIGGER      = 5;
-const int PIN_ECHO         = 18;
-const int PIN_BOTON        = 4;
-const int PIN_LED_VIBRADOR = 2;   // Simula motor vibrador (LED rojo)
-const int PIN_LED_ESTADO   = 13;  // LED azul: estado WiFi/conexión
+// ══════════════════════════════════════════════════════════════════
+namespace Pin {
+  const int TRIGGER      = 5;
+  const int ECHO         = 18;
+  const int BOTON        = 4;
+  const int VIBRADOR     = 2;   // LED rojo simula motor vibrador
+  const int LED_ESTADO   = 13;  // LED azul: conectado a WiFi
+}
 
-// ══════════════════════════════════════════
-//  UMBRALES
-// ══════════════════════════════════════════
-const float UMBRAL_DISTANCIA_CM = 50.0;  // Obstáculo si < 50 cm
-const int   DELAY_LECTURA_MS    = 300;   // Cada cuánto lee el sensor
+// ══════════════════════════════════════════════════════════════════
+//  UMBRALES Y TIEMPOS (centralizado; documentado en cm y ms)
+// ══════════════════════════════════════════════════════════════════
+namespace Umbral {
+  const float DISTANCIA_CM   = 50.0f;  // Obstáculo detectado si distancia < 50 cm
+  const float HISTERESIS_CM  = 10.0f;  // Debe superar 60 cm para "limpiar" la detección
+  const float MAX_VALIDA_CM  = 400.0f; // Lecturas > 400 cm se tratan como "sin obstáculo"
+  const float MIN_VALIDA_CM  = 2.0f;   // Lecturas < 2 cm se tratan como ruido
+}
 
-// ══════════════════════════════════════════
-//  ESTADO
-// ══════════════════════════════════════════
-bool modoActivoSolicitado = false;
-bool obstaculoDetectado   = false;
+namespace Tiempo {
+  const unsigned long TICK_SENSOR_MS  =  150;  // Frecuencia de lectura del sensor
+  const unsigned long TICK_WIFI_MS    = 5000;  // Frecuencia de verificación WiFi
+  const unsigned long TICK_HTTP_MS    =  500;  // Frecuencia de envío HTTP
+  const unsigned long COOLDOWN_MS     = 2000;  // Mínimo entre eventos consecutivos
+  const unsigned long WIFI_TIMEOUT_MS = 8000;  // Timeout de intento de conexión WiFi
+  const unsigned long HTTP_TIMEOUT_MS = 4000;  // Timeout de la petición HTTP
+  const unsigned long DEBOUNCE_BTN_MS = 2000;  // Debounce del botón físico
+}
 
-// ══════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+//  ESTADO INTERNO (volatile para acceso desde ISR/FreeRTOS)
+// ══════════════════════════════════════════════════════════════════
+
+// Evento pendiente de envío (acceso desde loop, escrito por tareaSeguridad)
+struct EventoPendiente {
+  volatile bool   hay;
+  char            modo[8];
+  float           distanciaCm;
+};
+
+static EventoPendiente eventoEnCola  = { false, "PASIVO", 0.0f };
+static portMUX_TYPE    colaMux       = portMUX_INITIALIZER_UNLOCKED;
+
+static bool          obstaculoActivo = false;
+static unsigned long ultimoEvento_ms = 0;
+static unsigned long ultimoBoton_ms  = 0;
+
+// ══════════════════════════════════════════════════════════════════
+//  PROTOTIPOS
+// ══════════════════════════════════════════════════════════════════
+float   medirDistanciaCm();
+void    actualizarVibrador(bool activar);
+void    encolarEvento(const char* modo, float distancia);
+bool    enviarEventoHTTP(const char* modo, float distancia);
+void    intentarConexionWiFi();
+void    tareaSeguridad(void* param);
+
+// ══════════════════════════════════════════════════════════════════
 //  SETUP
-// ══════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
 void setup() {
   Serial.begin(115200);
+  delay(100);
 
-  pinMode(PIN_TRIGGER,      OUTPUT);
-  pinMode(PIN_ECHO,         INPUT);
-  pinMode(PIN_BOTON,        INPUT_PULLUP);
-  pinMode(PIN_LED_VIBRADOR, OUTPUT);
-  pinMode(PIN_LED_ESTADO,   OUTPUT);
+  pinMode(Pin::TRIGGER,    OUTPUT);
+  pinMode(Pin::ECHO,       INPUT);
+  pinMode(Pin::BOTON,      INPUT_PULLUP);
+  pinMode(Pin::VIBRADOR,   OUTPUT);
+  pinMode(Pin::LED_ESTADO, OUTPUT);
 
-  Serial.println("[SmartCane] Iniciando...");
-  conectarWiFi();
+  digitalWrite(Pin::VIBRADOR,   LOW);
+  digitalWrite(Pin::LED_ESTADO, LOW);
+
+  Serial.println(F("\n[SmartCane] Iniciando (arquitectura no-bloqueante)..."));
+
+  // Tarea FreeRTOS en Core 0: solo seguridad local (sensor + vibrador)
+  // No se detiene aunque Core 1 esté esperando WiFi o HTTP.
+  xTaskCreatePinnedToCore(
+    tareaSeguridad,
+    "Seguridad",
+    4096,         // Stack en bytes
+    nullptr,
+    2,            // Prioridad alta (mayor que loop)
+    nullptr,
+    0             // Core 0
+  );
+
+  // Conexión WiFi inicial (no bloqueante: usa timeout)
+  intentarConexionWiFi();
 }
 
-// ══════════════════════════════════════════
-//  LOOP PRINCIPAL
-// ══════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+//  LOOP PRINCIPAL (Core 1) — solo red, sin bloquear seguridad
+// ══════════════════════════════════════════════════════════════════
 void loop() {
-  float distancia = medirDistanciaCm();
-  Serial.printf("[Sensor] Distancia: %.1f cm\n", distancia);
+  unsigned long ahora = millis();
+  static unsigned long ultimoWifi = 0;
+  static unsigned long ultimoHttp = 0;
 
-  // — Modo Pasivo: obstáculo detectado automáticamente
-  if (distancia < UMBRAL_DISTANCIA_CM && distancia > 0) {
-    if (!obstaculoDetectado) {
-      obstaculoDetectado = true;
-      activarVibrador(true);
-      Serial.println("[PASIVO] Obstáculo detectado. Enviando telemetría...");
-      enviarEvento("PASIVO", distancia, "");
+  // ── Verificación periódica de WiFi ──
+  if (ahora - ultimoWifi >= Tiempo::TICK_WIFI_MS) {
+    ultimoWifi = ahora;
+    if (WiFi.status() != WL_CONNECTED) {
+      digitalWrite(Pin::LED_ESTADO, LOW);
+      Serial.println(F("[WiFi] Desconectado. Reintentando..."));
+      intentarConexionWiFi();
     }
-  } else {
-    obstaculoDetectado = false;
-    activarVibrador(false);
   }
 
-  // — Modo Activo: usuario presionó el botón
-  if (digitalRead(PIN_BOTON) == LOW && !modoActivoSolicitado) {
-    modoActivoSolicitado = true;
-    Serial.println("[ACTIVO] Botón presionado. Solicitando análisis de IA...");
+  // ── Envío HTTP periódico si hay evento pendiente ──
+  if (ahora - ultimoHttp >= Tiempo::TICK_HTTP_MS) {
+    ultimoHttp = ahora;
 
-    // En hardware real: aquí se enviaría señal Serial al ESP32-CAM
-    // En simulación: enviamos con una imagen base64 de ejemplo vacía
-    String imagenSimulada = ""; // En el Avance 2 viene del ESP32-CAM real
-    enviarEvento("ACTIVO", distancia, imagenSimulada);
+    bool hayEvento;
+    char   modoLocal[8];
+    float  distLocal;
 
-    delay(2000); // Debounce
-    modoActivoSolicitado = false;
+    // Leer la cola de forma atómica
+    portENTER_CRITICAL(&colaMux);
+    hayEvento = eventoEnCola.hay;
+    if (hayEvento) {
+      strncpy(modoLocal, eventoEnCola.modo, sizeof(modoLocal) - 1);
+      modoLocal[sizeof(modoLocal) - 1] = '\0';
+      distLocal = eventoEnCola.distanciaCm;
+      eventoEnCola.hay = false; // Marcar como consumido (optimista)
+    }
+    portEXIT_CRITICAL(&colaMux);
+
+    if (hayEvento && WiFi.status() == WL_CONNECTED) {
+      bool enviado = enviarEventoHTTP(modoLocal, distLocal);
+      if (!enviado) {
+        // Re-encolar si el envío falló (solo si la cola está vacía para no duplicar)
+        portENTER_CRITICAL(&colaMux);
+        if (!eventoEnCola.hay) {
+          eventoEnCola.hay = true;
+          strncpy(eventoEnCola.modo, modoLocal, sizeof(eventoEnCola.modo) - 1);
+          eventoEnCola.distanciaCm = distLocal;
+        }
+        portEXIT_CRITICAL(&colaMux);
+        Serial.println(F("[HTTP] Reintentará en el siguiente tick"));
+      }
+    } else if (hayEvento) {
+      Serial.println(F("[HTTP] Sin WiFi. Evento guardado para próximo intento"));
+      // Re-encolar
+      portENTER_CRITICAL(&colaMux);
+      eventoEnCola.hay = true;
+      strncpy(eventoEnCola.modo, modoLocal, sizeof(eventoEnCola.modo) - 1);
+      eventoEnCola.distanciaCm = distLocal;
+      portEXIT_CRITICAL(&colaMux);
+    }
   }
-
-  delay(DELAY_LECTURA_MS);
 }
 
-// ══════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+//  TAREA FREERTOS — SEGURIDAD LOCAL (Core 0)
+//  NUNCA usa WiFi ni HTTP. Responde siempre.
+// ══════════════════════════════════════════════════════════════════
+void tareaSeguridad(void* param) {
+  unsigned long ultimoTick = 0;
+
+  for (;;) {
+    unsigned long ahora = millis();
+
+    if (ahora - ultimoTick >= Tiempo::TICK_SENSOR_MS) {
+      ultimoTick = ahora;
+
+      float distancia = medirDistanciaCm();
+
+      // ── Lógica de histéresis ──
+      bool dentroDeRango = (distancia >= Umbral::MIN_VALIDA_CM &&
+                            distancia <= Umbral::MAX_VALIDA_CM);
+
+      if (dentroDeRango && distancia < Umbral::DISTANCIA_CM) {
+        // Dentro del umbral de peligro
+        if (!obstaculoActivo) {
+          obstaculoActivo = true;
+          actualizarVibrador(true);
+          Serial.printf("[SEGURIDAD] Obstáculo: %.1f cm\n", distancia);
+
+          // Cooldown entre eventos
+          if (ahora - ultimoEvento_ms >= Tiempo::COOLDOWN_MS) {
+            ultimoEvento_ms = ahora;
+            encolarEvento("PASIVO", distancia);
+          }
+        }
+      } else if (obstaculoActivo &&
+                 distancia > (Umbral::DISTANCIA_CM + Umbral::HISTERESIS_CM)) {
+        // Superó umbral + histéresis: camino libre
+        obstaculoActivo = false;
+        actualizarVibrador(false);
+        Serial.println(F("[SEGURIDAD] Camino libre"));
+      }
+
+      // ── Modo Activo: botón ──
+      if (digitalRead(Pin::BOTON) == LOW) {
+        if (ahora - ultimoBoton_ms >= Tiempo::DEBOUNCE_BTN_MS) {
+          ultimoBoton_ms = ahora;
+          Serial.printf("[ACTIVO] Botón. Distancia: %.1f cm\n", distancia);
+          encolarEvento("ACTIVO", distancia);
+        }
+      }
+    }
+
+    vTaskDelay(1); // Cede el control brevemente para el watchdog
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  FUNCIONES
-// ══════════════════════════════════════════
-
-void conectarWiFi() {
-  Serial.printf("[WiFi] Conectando a %s", SSID);
-  WiFi.begin(SSID, PASSWORD);
-
-  int intentos = 0;
-  while (WiFi.status() != WL_CONNECTED && intentos < 20) {
-    delay(500);
-    Serial.print(".");
-    intentos++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\n[WiFi] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
-    digitalWrite(PIN_LED_ESTADO, HIGH);
-  } else {
-    Serial.println("\n[WiFi] ERROR: No se pudo conectar.");
-    digitalWrite(PIN_LED_ESTADO, LOW);
-  }
-}
+// ══════════════════════════════════════════════════════════════════
 
 float medirDistanciaCm() {
-  digitalWrite(PIN_TRIGGER, LOW);
+  digitalWrite(Pin::TRIGGER, LOW);
   delayMicroseconds(2);
-  digitalWrite(PIN_TRIGGER, HIGH);
+  digitalWrite(Pin::TRIGGER, HIGH);
   delayMicroseconds(10);
-  digitalWrite(PIN_TRIGGER, LOW);
+  digitalWrite(Pin::TRIGGER, LOW);
 
-  long duracion = pulseIn(PIN_ECHO, HIGH, 30000);
-  if (duracion == 0) return 999.0; // Sin respuesta = sin obstáculo
-  return duracion * 0.034 / 2.0;
+  long duracion = pulseIn(Pin::ECHO, HIGH, 25000); // Timeout 25 ms (≈ 425 cm)
+  if (duracion == 0) return Umbral::MAX_VALIDA_CM + 1.0f; // Sin respuesta = sin obstáculo
+  return duracion * 0.034f / 2.0f;
 }
 
-void activarVibrador(bool activar) {
-  digitalWrite(PIN_LED_VIBRADOR, activar ? HIGH : LOW);
+void actualizarVibrador(bool activar) {
+  digitalWrite(Pin::VIBRADOR, activar ? HIGH : LOW);
 }
 
-void enviarEvento(String modo, float distanciaCm, String imagenBase64) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[HTTP] Sin WiFi. Reintentando conexión...");
-    conectarWiFi();
-    return;
+/** Encola un evento para envío HTTP posterior (llamado desde tareaSeguridad). */
+void encolarEvento(const char* modo, float distancia) {
+  portENTER_CRITICAL(&colaMux);
+  // Solo encolar si no hay uno pendiente (evitar sobreescribir; el anterior tiene prioridad)
+  if (!eventoEnCola.hay) {
+    eventoEnCola.hay = true;
+    strncpy(eventoEnCola.modo, modo, sizeof(eventoEnCola.modo) - 1);
+    eventoEnCola.modo[sizeof(eventoEnCola.modo) - 1] = '\0';
+    eventoEnCola.distanciaCm = distancia;
   }
+  portEXIT_CRITICAL(&colaMux);
+}
 
-  String url = String(NGROK_URL) + String(ENDPOINT);
+/** Envía el evento al backend. Devuelve true si HTTP 200-299. */
+bool enviarEventoHTTP(const char* modo, float distancia) {
+  String url = String(Cfg::BACKEND_URL) + String(Cfg::ENDPOINT);
 
-  // Construir JSON
-  StaticJsonDocument<1024> doc;
+  // Construir JSON (sin imagenUrl: el ESP32-Maestro no envía imágenes)
+  StaticJsonDocument<256> doc;
   doc["modo"]        = modo;
-  doc["distanciaCm"] = distanciaCm;
-  if (imagenBase64.length() > 0) {
-    doc["imagenUrl"] = imagenBase64;
-  }
-
+  doc["distanciaCm"] = distancia;
+  // etiquetasIA omitida: el backend asigna null en modo PASIVO
   String jsonBody;
   serializeJson(doc, jsonBody);
 
-  Serial.printf("[HTTP] POST %s\n", url.c_str());
-  Serial.printf("[HTTP] Body: %s\n", jsonBody.c_str());
-
   HTTPClient http;
+  http.setTimeout(Tiempo::HTTP_TIMEOUT_MS);
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Accept",       "application/json");
+  // Autenticación por token de dispositivo (no usa sesión ni cookies)
+  http.addHeader("X-Device-Token", Cfg::DEVICE_TOKEN);
 
-  int codigoRespuesta = http.POST(jsonBody);
+  Serial.printf("[HTTP] POST %s modo=%s dist=%.1f\n", url.c_str(), modo, distancia);
+  int codigo = http.POST(jsonBody);
 
-  if (codigoRespuesta > 0) {
-    String respuesta = http.getString();
-    Serial.printf("[HTTP] Respuesta %d: %s\n", codigoRespuesta, respuesta.c_str());
+  bool exito = (codigo >= 200 && codigo < 300);
+  if (exito) {
+    Serial.printf("[HTTP] OK %d\n", codigo);
+  } else if (codigo > 0) {
+    Serial.printf("[HTTP] Error servidor %d\n", codigo);
   } else {
-    Serial.printf("[HTTP] ERROR: %s\n", http.errorToString(codigoRespuesta).c_str());
+    Serial.printf("[HTTP] Error conexion: %s\n", http.errorToString(codigo).c_str());
   }
 
   http.end();
+  return exito;
+}
+
+/** Intento de conexión WiFi con timeout. No bloquea más de WIFI_TIMEOUT_MS. */
+void intentarConexionWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return;
+
+  Serial.printf("[WiFi] Conectando a %s...\n", Cfg::SSID);
+  WiFi.begin(Cfg::SSID, Cfg::PASSWORD);
+
+  unsigned long inicio = millis();
+  while (WiFi.status() != WL_CONNECTED &&
+         millis() - inicio < Tiempo::WIFI_TIMEOUT_MS) {
+    delay(200);
+    Serial.print('.');
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("[WiFi] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
+    digitalWrite(Pin::LED_ESTADO, HIGH);
+  } else {
+    Serial.println(F("[WiFi] Sin conexión. El bastón sigue funcionando localmente."));
+    digitalWrite(Pin::LED_ESTADO, LOW);
+  }
 }
