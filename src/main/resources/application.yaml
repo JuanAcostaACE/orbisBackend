@@ -23,13 +23,21 @@ spring:
   session:
     timeout: 8h
 
-# ── CORS (URL del frontend en producción) ──
-# Configurar en Railway Dashboard > Variables:
-#   APP_CORS_ORIGIN  = https://tu-proyecto.vercel.app   (URL exacta, sin trailing slash)
+# ── CORS ──
+# APP_CORS_ORIGIN  = URL exacta del frontend en producción (sin trailing slash)
 app:
   cors:
     origin: ${APP_CORS_ORIGIN:}
     origin2: ${APP_CORS_ORIGIN2:}
+
+  # ── Autenticación de dispositivo ESP32 ──
+  # Configurar en Railway Dashboard > Variables:
+  #   APP_DEVICE_TOKEN       = <cadena aleatoria 32+ chars>   (secreto del dispositivo)
+  #   APP_DEVICE_OWNER_EMAIL = correo@ejemplo.com             (usuario propietario de eventos del dispositivo)
+  # Si APP_DEVICE_TOKEN está vacío, la autenticación por dispositivo queda deshabilitada.
+  device:
+    token: ${APP_DEVICE_TOKEN:}
+    ownerEmail: ${APP_DEVICE_OWNER_EMAIL:}
 
 ---
 # PERFIL: prod (Railway + PostgreSQL)
