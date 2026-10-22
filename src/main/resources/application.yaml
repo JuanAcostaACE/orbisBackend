@@ -1,8 +1,39 @@
 server:
   port: ${PORT:8080}
 
+  # ── Cookie de sesión ──
+  # PROBLEMA CROSS-DOMAIN:
+  #   Vercel (*.vercel.app) y Railway (*.up.railway.app) están en dominios distintos.
+  #   Los navegadores modernos bloquean cookies SameSite=Strict/Lax en contexto cross-origin.
+  #
+  # SOLUCIÓN:
+  #   Se configura un proxy en vercel.json que reescribe /api/* y /auth/* hacia Railway.
+  #   De esta forma el navegador ve un solo origen (el de Vercel) y las cookies funcionan
+  #   como first-party (mismo dominio). SameSite=Strict es suficiente en ese caso.
+  #
+  # LOCAL (sin proxy):
+  #   En localhost, las cookies también son first-party (http://localhost:8080),
+  #   SameSite=Strict funciona correctamente.
+  #
+  # PRODUCCIÓN sin proxy (fallback):
+  #   Si no se configura el proxy de Vercel, usar SameSite=None requiere Secure=true (HTTPS).
+  #   Railway sirve por HTTPS por defecto → funciona, pero el navegador marca la cookie
+  #   como cross-site (third-party), sujeta a restricciones futuras de Chrome.
+  #
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        # 'secure' solo activo en producción (Railway usa HTTPS); false en localhost (HTTP)
+        secure: ${SESSION_COOKIE_SECURE:false}
+        # SameSite=Strict cuando hay proxy Vercel→Railway (mismo origen para el navegador)
+        # SameSite=None necesita secure=true; úsalo solo si no puedes usar el proxy
+        same-site: ${SESSION_COOKIE_SAMESITE:Strict}
+        name: ORBIS_SID   # Evitar el nombre por defecto "JSESSIONID" (fingerprinting)
+        max-age: 28800    # 8h en segundos
+
 spring:
-  # ── Perfil default: H2 en memoria (sin DB externa, para desarrollo local) ──
+  # ── Perfil default: H2 en memoria (desarrollo local, sin DB externa) ──
   datasource:
     url: ${DB_URL:jdbc:h2:mem:orbis;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
     username: ${DB_USERNAME:sa}
@@ -17,31 +48,31 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
-    # Sin 'hibernate.dialect': Spring Boot / Hibernate lo detecta automáticamente (evita HHH90000025)
+    # Sin 'hibernate.dialect': Spring Boot / Hibernate lo detecta automáticamente
 
-  # ── Sesión HTTP ──
   session:
     timeout: 8h
 
 # ── CORS ──
-# APP_CORS_ORIGIN  = URL exacta del frontend en producción (sin trailing slash)
+# APP_CORS_ORIGIN  = URL exacta del frontend en Vercel (sin trailing slash)
+# APP_CORS_ORIGIN2 = URL alternativa (localhost:3000 para desarrollo local)
 app:
   cors:
-    origin: ${APP_CORS_ORIGIN:}
-    origin2: ${APP_CORS_ORIGIN2:}
+    origin: ${APP_CORS_ORIGIN:http://localhost:5173}
+    origin2: ${APP_CORS_ORIGIN2:http://localhost:8080}
 
   # ── Autenticación de dispositivo ESP32 ──
   # Configurar en Railway Dashboard > Variables:
-  #   APP_DEVICE_TOKEN       = <cadena aleatoria 32+ chars>   (secreto del dispositivo)
-  #   APP_DEVICE_OWNER_EMAIL = correo@ejemplo.com             (usuario propietario de eventos del dispositivo)
-  # Si APP_DEVICE_TOKEN está vacío, la autenticación por dispositivo queda deshabilitada.
+  #   APP_DEVICE_TOKEN       = <cadena aleatoria 32+ chars>
+  #   APP_DEVICE_OWNER_EMAIL = correo@ejemplo.com
+  # Si APP_DEVICE_TOKEN está vacío, la autenticación de dispositivo queda deshabilitada.
   device:
     token: ${APP_DEVICE_TOKEN:}
     ownerEmail: ${APP_DEVICE_OWNER_EMAIL:}
 
 ---
 # PERFIL: prod (Railway + PostgreSQL)
-# Activar con: SPRING_PROFILES_ACTIVE=prod en Railway Dashboard
+# Activar con SPRING_PROFILES_ACTIVE=prod en Railway Dashboard
 spring:
   config:
     activate:
@@ -59,3 +90,10 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true          # Railway siempre es HTTPS
+        same-site: Strict     # Funciona con proxy Vercel; cambiar a None si no hay proxy

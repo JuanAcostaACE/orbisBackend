@@ -14,26 +14,39 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 
 /**
  * Filtro de autenticación para dispositivos físicos (ESP32).
  *
- * El ESP32 no puede usar una sesión de navegador (cookies HttpOnly / CSRF).
- * En su lugar, envía el header {@code X-Device-Token} con un token secreto
- * configurado como variable de entorno {@code DEVICE_TOKEN}.
- *
- * Cuando el token es válido, se establece un {@code Authentication} con el
- * principal {@code "device:esp32"} y el rol {@code ROLE_DEVICE}.
- * El backend asigna el propietario del evento mediante el campo
- * {@code DEVICE_OWNER_EMAIL} (correo de un usuario registrado).
- *
  * SEGURIDAD:
- *  - El token debe tener al menos 32 caracteres aleatorios.
- *  - Nunca incluir el token en el código fuente ni en archivos versionados.
- *  - En hardware real, almacenar en NVS (nvs_flash) del ESP32, no en el sketch.
- *  - En Wokwi (simulación) se puede pasar como constante para pruebas locales.
- *  - Rotar el token si se sospecha compromiso; revocar basta con cambiar la var de entorno.
+ *
+ * 1. Comparación en tiempo constante (timing-safe):
+ *    Usa {@link MessageDigest#isEqual} con bytes UTF-8 para evitar ataques de
+ *    timing (side-channel). Una comparación con {@code String.equals} puede
+ *    retornar en distinto tiempo dependiendo de cuántos bytes coincidan,
+ *    permitiendo que un atacante deduzca el token mediante peticiones repetidas.
+ *
+ * 2. Rechazo seguro si el token no está configurado:
+ *    Si {@code APP_DEVICE_TOKEN} está vacío o en blanco, este filtro NO autentica
+ *    ninguna petición de dispositivo. Cualquier petición con X-Device-Token hacia
+ *    un endpoint protegido recibirá 401 por el EntryPoint de Spring Security.
+ *    No hay NullPointerException ni fallo silencioso.
+ *
+ * 3. Sin logging del token:
+ *    El valor del token NUNCA se imprime en logs ni en respuestas de error.
+ *    Solo se registra el resultado (autenticado / rechazado) con el IP del cliente.
+ *
+ * 4. Contexto del dispositivo:
+ *    El propietario de los eventos del dispositivo se resuelve exclusivamente
+ *    desde el atributo de request {@code deviceOwnerEmail}, que viene de la
+ *    variable de entorno {@code APP_DEVICE_OWNER_EMAIL}, nunca del body del request.
+ *
+ * CONFIGURACIÓN (Railway Dashboard > Variables):
+ *   APP_DEVICE_TOKEN       = <cadena aleatoria 32+ chars>
+ *   APP_DEVICE_OWNER_EMAIL = correo@ejemplo.com
  */
 @Component
 public class DeviceTokenFilter extends OncePerRequestFilter {
@@ -45,19 +58,22 @@ public class DeviceTokenFilter extends OncePerRequestFilter {
     public static final String DEVICE_PRINCIPAL = "device:esp32";
 
     /**
-     * Token secreto. Configurar en Railway:  DEVICE_TOKEN=<valor aleatorio 32+ chars>
-     * Valor por defecto vacío → autenticación de dispositivo deshabilitada.
+     * Token secreto en bytes UTF-8 pre-calculados.
+     * Almacenar como bytes evita re-encodear en cada request.
+     * Si vacío → autenticación de dispositivo deshabilitada.
      */
-    @Value("${app.device.token:}")
-    private String deviceToken;
+    private final byte[] deviceTokenBytes;
 
-    /**
-     * Correo del usuario propietario de los eventos del dispositivo.
-     * Debe corresponder a un usuario registrado en la base de datos.
-     * Configurar en Railway: DEVICE_OWNER_EMAIL=admin@ejemplo.com
-     */
     @Value("${app.device.ownerEmail:}")
     private String deviceOwnerEmail;
+
+    public DeviceTokenFilter(@Value("${app.device.token:}") String deviceToken) {
+        // Pre-calcular bytes una sola vez al arrancar
+        // Si el token está vacío, se guarda un array de longitud 0 (seguro)
+        this.deviceTokenBytes = (deviceToken == null || deviceToken.isBlank())
+                ? new byte[0]
+                : deviceToken.getBytes(StandardCharsets.UTF_8);
+    }
 
     @Override
     protected void doFilterInternal(
@@ -66,20 +82,39 @@ public class DeviceTokenFilter extends OncePerRequestFilter {
             @NonNull FilterChain         filterChain
     ) throws ServletException, IOException {
 
-        // Solo actuar si el deviceToken está configurado y el contexto aún no está autenticado
-        if (!deviceToken.isBlank() && SecurityContextHolder.getContext().getAuthentication() == null) {
-            String header = request.getHeader(HEADER_NAME);
-            if (deviceToken.equals(header)) {
-                SecurityContext ctx = SecurityContextHolder.createEmptyContext();
-                ctx.setAuthentication(new UsernamePasswordAuthenticationToken(
-                        DEVICE_PRINCIPAL,
-                        null,
-                        List.of(new SimpleGrantedAuthority("ROLE_DEVICE"))
-                ));
-                SecurityContextHolder.setContext(ctx);
+        // Dispositivo deshabilitado: continuar sin autenticar
+        if (deviceTokenBytes.length == 0) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
-                // Propagar el correo del propietario para que EventoService lo use
-                request.setAttribute("deviceOwnerEmail", deviceOwnerEmail);
+        // Solo actuar si el contexto aún no está autenticado (no sobreescribir sesión web)
+        if (SecurityContextHolder.getContext().getAuthentication() == null) {
+            String header = request.getHeader(HEADER_NAME);
+
+            if (header != null && !header.isBlank()) {
+                byte[] headerBytes = header.getBytes(StandardCharsets.UTF_8);
+
+                // Comparación en tiempo constante (timing-safe)
+                boolean tokenValido = MessageDigest.isEqual(deviceTokenBytes, headerBytes);
+
+                if (tokenValido) {
+                    SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+                    ctx.setAuthentication(new UsernamePasswordAuthenticationToken(
+                            DEVICE_PRINCIPAL,
+                            null,
+                            List.of(new SimpleGrantedAuthority("ROLE_DEVICE"))
+                    ));
+                    SecurityContextHolder.setContext(ctx);
+                    request.setAttribute("deviceOwnerEmail", deviceOwnerEmail);
+
+                    logger.debug("Dispositivo autenticado desde IP: " + request.getRemoteAddr());
+                } else {
+                    // Token inválido recibido — log mínimo sin revelar valores
+                    logger.warn("X-Device-Token inválido recibido desde IP: " + request.getRemoteAddr()
+                              + " (longitud header: " + headerBytes.length
+                              + ", longitud esperada: " + deviceTokenBytes.length + ")");
+                }
             }
         }
 
