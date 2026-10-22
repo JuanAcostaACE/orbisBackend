@@ -8,10 +8,11 @@ import com.orbis.api.model.Usuario;
 import com.orbis.api.repository.UsuarioRepository;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -34,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthControllerTest {
 
     @Autowired MockMvc         mvc;
-    @Autowired ObjectMapper    mapper;
+    final ObjectMapper         mapper = new ObjectMapper();
     @Autowired UsuarioRepository usuarioRepo;
     @Autowired PasswordEncoder passwordEncoder;
 
@@ -134,10 +135,10 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        String sessionCookie = loginResult.getResponse().getHeader("Set-Cookie");
+        MockHttpSession sesion = (MockHttpSession) loginResult.getRequest().getSession(false);
 
         mvc.perform(get("/api/v1/eventos?page=0&size=10")
-                .header("Cookie", sessionCookie)
+                .session(sesion)
                 .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contenido").isArray())
@@ -163,7 +164,7 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsString(new LoginRequest(CORREO_A, PASS))))
                 .andReturn();
-        String cookieA = loginA.getResponse().getHeader("Set-Cookie");
+        MockHttpSession cookieA = (MockHttpSession) loginA.getRequest().getSession(false);
 
         // Crear evento con usuario A
         String eventoJson = """
@@ -172,7 +173,7 @@ class AuthControllerTest {
         MvcResult postResult = mvc.perform(post("/api/v1/eventos")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(eventoJson)
-                .header("Cookie", cookieA))
+                .session(cookieA))
                 .andExpect(status().isCreated())
                 .andReturn();
 
@@ -184,16 +185,16 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsString(new LoginRequest(CORREO_B, PASS))))
                 .andReturn();
-        String cookieB = loginB.getResponse().getHeader("Set-Cookie");
+        MockHttpSession cookieB = (MockHttpSession) loginB.getRequest().getSession(false);
 
         // Usuario B intenta acceder al evento de A → debe ser 404
         mvc.perform(get("/api/v1/eventos/" + idEvento)
-                .header("Cookie", cookieB))
+                .session(cookieB))
                 .andExpect(status().isNotFound());
 
         // Lista de B debe estar vacía
         mvc.perform(get("/api/v1/eventos")
-                .header("Cookie", cookieB)
+                .session(cookieB)
                 .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElementos").value(0));
@@ -220,12 +221,12 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsString(new LoginRequest(CORREO_A, PASS))))
                 .andReturn();
-        String cookie = login.getResponse().getHeader("Set-Cookie");
+        MockHttpSession cookie = (MockHttpSession) login.getRequest().getSession(false);
 
         mvc.perform(post("/api/v1/eventos")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"modo\":\"INVALIDO\",\"distanciaCm\":30.0}")
-                .header("Cookie", cookie))
+                .session(cookie))
                 .andExpect(status().isBadRequest());
     }
 
@@ -236,12 +237,12 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsString(new LoginRequest(CORREO_A, PASS))))
                 .andReturn();
-        String cookie = login.getResponse().getHeader("Set-Cookie");
+        MockHttpSession cookie = (MockHttpSession) login.getRequest().getSession(false);
 
         mvc.perform(post("/api/v1/eventos")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"modo\":\"PASIVO\",\"distanciaCm\":-5.0}")
-                .header("Cookie", cookie))
+                .session(cookie))
                 .andExpect(status().isBadRequest());
     }
 }
