@@ -51,9 +51,16 @@ public class ActivoStrategy implements ModoProcesamientoStrategy {
         String imagenBase64          = eventoRequest.getImagenUrl();
 
         if (etiquetasYaCalculadas != null && !etiquetasYaCalculadas.isBlank()) {
-            // Flujo 1: El frontend (navegador) ya llamo a Hugging Face y envio las etiquetas.
-            // No es necesario llamar a Vision de nuevo - conservar las etiquetas recibidas.
-
+            // Flujo 1: El frontend (GestorVision/COCO-SSD o MobileNet) ya calculó las etiquetas.
+            // Se pasan por VisionAdapter para validarlas y normalizarlas antes de persistir.
+            // Esto garantiza que el Adapter/Facade tiene responsabilidad REAL en el pipeline.
+            try {
+                List<String> etiquetasNormalizadas = visionFacade.analizarImagen(etiquetasYaCalculadas);
+                eventoRequest.setEtiquetasIA(String.join(", ", etiquetasNormalizadas));
+            } catch (VisionException e) {
+                // Si la validación falla, se registra como error de IA pero no se rechaza el evento
+                eventoRequest.setEtiquetasIA("ERROR_VISION: " + e.getMessage());
+            }
         } else if (imagenBase64 != null && !imagenBase64.isBlank()) {
             // Flujo 2: El frontend envio la imagen en Base64 para que el backend llame a la IA.
             try {
