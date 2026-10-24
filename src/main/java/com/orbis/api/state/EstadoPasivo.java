@@ -17,7 +17,12 @@ import org.springframework.stereotype.Component;
 public class EstadoPasivo implements EstadoSistema {
 
     private static final Logger log = LoggerFactory.getLogger(EstadoPasivo.class);
-    private static final double UMBRAL_LIBRE_CM = 80.0;
+    /**
+     * Distancia a partir de la cual el obstáculo se considera despejado.
+     * Coincide con el umbral de recuperación de la histéresis del firmware
+     * (sketch.ino: 100 cm + 15 cm) y del simulador (alertas.ts: 115 cm).
+     */
+    public static final double UMBRAL_LIBRE_CM = 115.0;
 
     @Override
     public void manejarEvento(ContextoSistema contexto, RegistroEvento evento) {
