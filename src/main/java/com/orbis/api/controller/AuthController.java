@@ -56,7 +56,13 @@ public class AuthController {
                 new UsernamePasswordAuthenticationToken(request.correo(), request.contrasena())
         );
 
-        // 2. Guardar en SecurityContext y en sesión HTTP
+        // 2. Protección contra session fixation: si ya existía una sesión (p. ej. anónima
+        //    o creada por un atacante), se cambia su ID antes de asociarla al usuario.
+        if (httpRequest.getSession(false) != null) {
+            httpRequest.changeSessionId();
+        }
+
+        // 3. Guardar en SecurityContext y en sesión HTTP
         SecurityContext ctx = SecurityContextHolder.createEmptyContext();
         ctx.setAuthentication(auth);
         SecurityContextHolder.setContext(ctx);

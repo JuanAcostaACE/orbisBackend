@@ -30,12 +30,15 @@ public class AuthService {
 
     /**
      * Registra un nuevo usuario.
-     * @throws IllegalArgumentException si el correo ya está registrado.
+     * @throws IllegalArgumentException si el correo ya está registrado. El mensaje es
+     *         genérico a propósito para no revelar si un correo tiene cuenta; el código
+     *         HTTP (400) y la forma del JSON se mantienen para no romper el frontend.
      */
     @Transactional
     public AuthResponse registrar(RegistroRequest request) {
         if (usuarioRepository.existsByCorreo(request.correo().toLowerCase())) {
-            throw new IllegalArgumentException("El correo ya está registrado");
+            throw new IllegalArgumentException(
+                    "No se pudo completar el registro. Verifica los datos e intenta de nuevo");
         }
 
         Usuario u = new Usuario();

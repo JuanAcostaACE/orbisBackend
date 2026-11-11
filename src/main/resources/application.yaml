@@ -41,7 +41,8 @@ spring:
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
   h2:
     console:
-      enabled: true
+      # Desactivada por defecto. Solo se activa con el perfil dev (ver bloque dev más abajo).
+      enabled: false
       path: /h2-console
   jpa:
     open-in-view: false
@@ -69,6 +70,30 @@ app:
   device:
     token: ${APP_DEVICE_TOKEN:}
     ownerEmail: ${APP_DEVICE_OWNER_EMAIL:}
+
+  # ── Limitador de peticiones por IP (ventana fija, en memoria) ──
+  # Aplica solo a POST /auth/login y POST /auth/registro. Responde 429 al exceder.
+  # Detrás de un proxy (Railway), la IP es la del proxy: ver README.
+  ratelimit:
+    enabled: ${APP_RATELIMIT_ENABLED:true}
+    login:
+      max-intentos: ${APP_RATELIMIT_LOGIN_MAX:10}
+      ventana-segundos: ${APP_RATELIMIT_LOGIN_VENTANA:60}
+    registro:
+      max-intentos: ${APP_RATELIMIT_REGISTRO_MAX:10}
+      ventana-segundos: ${APP_RATELIMIT_REGISTRO_VENTANA:3600}
+
+---
+# PERFIL: dev (desarrollo local explícito)
+# Consola H2 solo si se activa también la variable H2_CONSOLE_ENABLED=true.
+# Uso: SPRING_PROFILES_ACTIVE=dev H2_CONSOLE_ENABLED=true
+spring:
+  config:
+    activate:
+      on-profile: dev
+  h2:
+    console:
+      enabled: ${H2_CONSOLE_ENABLED:false}
 
 ---
 # PERFIL: prod (Railway + PostgreSQL)
