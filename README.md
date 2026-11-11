@@ -70,8 +70,20 @@ cd orbisBackend
 
 # 3. API disponible en:
 # http://localhost:8080/api/v1/eventos
-# http://localhost:8080/h2-console  (solo en modo local)
 ```
+
+### Consola H2 (solo desarrollo explicito)
+
+La consola H2 (`/h2-console`) esta **desactivada** en el perfil por defecto. Solo se activa
+con el perfil `dev` y la variable `H2_CONSOLE_ENABLED=true`:
+
+```bash
+SPRING_PROFILES_ACTIVE=dev H2_CONSOLE_ENABLED=true ./mvnw spring-boot:run
+# Consola: http://localhost:8080/h2-console
+```
+
+En `prod` la consola siempre esta desactivada. La base H2 en memoria sigue siendo el
+almacenamiento local por defecto.
 
 ---
 
@@ -79,6 +91,36 @@ cd orbisBackend
 
 ### Desarrollo local (sin variables — usa H2 en memoria automaticamente)
 No se requiere ninguna variable de entorno para correr en local.
+
+### Limitador de peticiones (login y registro)
+
+`POST /auth/login` y `POST /auth/registro` tienen un limite por IP con ventana fija
+(en memoria). Al superarlo responde **429** con `{status, mensaje, timestamp}` y la cabecera `Retry-After`.
+
+| Variable | Por defecto | Descripcion |
+|---|---|---|
+| APP_RATELIMIT_ENABLED | true | Activa o desactiva el limitador |
+| APP_RATELIMIT_LOGIN_MAX | 10 | Intentos de login permitidos por ventana |
+| APP_RATELIMIT_LOGIN_VENTANA | 60 | Duracion de la ventana de login (segundos) |
+| APP_RATELIMIT_REGISTRO_MAX | 10 | Registros permitidos por ventana |
+| APP_RATELIMIT_REGISTRO_VENTANA | 3600 | Duracion de la ventana de registro (segundos) |
+
+Limitaciones: el contador vive en memoria (cada instancia cuenta aparte) y se usa la IP
+de la conexion. Detras de un proxy (Railway, Vercel) todas las peticiones pueden venir
+de la misma IP del proxy; en ese caso el limite es global y no por usuario final.
+
+### Autenticacion de dispositivo (ESP32)
+
+| Variable | Descripcion |
+|---|---|
+| APP_DEVICE_TOKEN | Token que el ESP32 envia en `X-Device-Token`. |
+| APP_DEVICE_OWNER_EMAIL | Correo del usuario propietario de los eventos del dispositivo. |
+
+**Comportamiento si `APP_DEVICE_TOKEN` esta vacio o no definido:** la autenticacion de
+dispositivo queda deshabilitada de forma silenciosa. El filtro no autentica ninguna
+peticion con `X-Device-Token`, sin error al arrancar ni aviso en logs. Sin token valido,
+`POST /api/v1/eventos` solo acepta una sesion de usuario; el ESP32 recibira 401.
+Verificar que la variable este definida en cada entorno.
 
 ### Produccion (Railway + PostgreSQL)
 
