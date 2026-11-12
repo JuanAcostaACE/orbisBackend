@@ -25,10 +25,7 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # El bit de ejecución de mvnw no está en el índice de git (100644); sin esto CI falla con "Permission denied".
-      - name: Make Maven wrapper executable
-        run: chmod +x ./mvnw
-
+      # mvnw es 100755 en el índice de git (ver commit chore(ci): mvnw ejecutable en el indice).
       - name: Run tests (H2, sin secretos de producción)
         run: ./mvnw -B test
         # No se usan DB_URL ni APP_GOOGLE_CLOUD_CREDENTIALS.
