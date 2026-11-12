@@ -206,7 +206,7 @@ Puntos a tener en cuenta si se decide reescribir:
 
 - Reescribir invalida todos los clones existentes: cada persona debe volver a clonar o hacer reset al nuevo
   historial. Los forks y las ramas abiertas quedan desalineados.
-- Requiere un force push coordinado a las ramas afectadas, con un momento acordado y las proteccion de rama
+- Requiere un force push coordinado a las ramas afectadas, con un momento acordado y las protecciones de rama
   revisadas (un force push puede estar bloqueado en `main`).
 - Tambien hay que purgar caches de CI y cualquier copia del historial fuera de GitHub.
 - **Esta fase no incluye la reescritura del historial ni el force push.** Queda fuera de alcance hasta que el
