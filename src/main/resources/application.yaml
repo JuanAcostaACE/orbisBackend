@@ -93,6 +93,11 @@ app:
     registro:
       max-intentos: ${APP_RATELIMIT_REGISTRO_MAX:10}
       ventana-segundos: ${APP_RATELIMIT_REGISTRO_VENTANA:3600}
+    # Límite por CUENTA (correo normalizado) en login, independiente de la IP.
+    # Tras max-intentos fallos en la ventana, la cuenta responde 429 hasta que caduque.
+    cuenta:
+      max-intentos: ${APP_RATELIMIT_CUENTA_MAX:5}
+      ventana-segundos: ${APP_RATELIMIT_CUENTA_VENTANA:900}
 
 ---
 # PERFIL: dev (desarrollo local explícito)

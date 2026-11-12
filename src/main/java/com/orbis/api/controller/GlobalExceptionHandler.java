@@ -1,6 +1,7 @@
 package com.orbis.api.controller;
 
 import com.orbis.api.facade.VisionException;
+import com.orbis.api.service.CuentaBloqueadaException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -66,6 +67,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleBadCredentials(Exception ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(errorBody(401, "Credenciales incorrectas"));
+    }
+
+    /** Cuenta bloqueada por demasiados intentos — 429, mismo cuerpo que el limitador por IP. */
+    @ExceptionHandler(CuentaBloqueadaException.class)
+    public ResponseEntity<Map<String, Object>> handleCuentaBloqueada(CuentaBloqueadaException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getSegundosRestantes()))
+                .body(errorBody(429, "Demasiados intentos. Intenta de nuevo más tarde"));
     }
 
     /** Usuario no encontrado tras autenticarse (caso raro) — 404. */
