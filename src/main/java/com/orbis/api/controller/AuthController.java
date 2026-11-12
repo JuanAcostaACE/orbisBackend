@@ -3,6 +3,7 @@ package com.orbis.api.controller;
 import com.orbis.api.dto.AuthResponse;
 import com.orbis.api.dto.LoginRequest;
 import com.orbis.api.dto.RegistroRequest;
+import com.orbis.api.dto.RegistroResponse;
 import com.orbis.api.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -51,11 +52,14 @@ public class AuthController {
         this.cookieSameSite = cookieSameSite;
     }
 
-    /** Registra un nuevo usuario. Devuelve 201 Created. */
+    /**
+     * Registro anti-enumeración: 201 con el mismo cuerpo exista o no el correo.
+     * Los datos inválidos siguen devolviendo 400 (no revelan existencia).
+     */
     @PostMapping("/registro")
-    public ResponseEntity<AuthResponse> registro(
+    public ResponseEntity<RegistroResponse> registro(
             @Valid @RequestBody RegistroRequest request) {
-        AuthResponse response = authService.registrar(request);
+        RegistroResponse response = authService.registrar(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
