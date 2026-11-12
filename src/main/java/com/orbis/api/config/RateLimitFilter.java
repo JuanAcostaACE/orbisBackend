@@ -28,8 +28,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * Limitaciones conocidas:
  *   - El contador vive en memoria del proceso: con varias instancias cada una cuenta aparte.
- *   - Usa request.getRemoteAddr(). Detrás de un proxy (Railway) esa IP es la del proxy;
- *     no se confía en X-Forwarded-For porque es falsificable sin un proxy de confianza.
+ *   - Usa request.getRemoteAddr(). Este filtro NO lee cabeceras. El cliente real lo resuelve
+ *     Tomcat (RemoteIpValve, server.tomcat.remoteip.*) solo cuando la conexión directa viene de
+ *     un proxy de confianza; X-Real-IP de otros pares se ignora y X-Forwarded-For nunca se usa.
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
