@@ -32,7 +32,7 @@
  * AUTENTICACIÓN (backend con Spring Security):
  *   El ESP32 envía el header X-Device-Token con el valor de DEVICE_TOKEN.
  *   El token debe almacenarse en NVS en hardware físico (no en el sketch).
- *   Para Wokwi (simulación), se puede dejar un valor de prueba.
+ *   Para Wokwi (simulación), usar un secrets.h local (ver CONFIGURACIÓN abajo).
  *   El token NUNCA se imprime por Serial.
  *
  * SECRETOS:
@@ -58,12 +58,12 @@
 #include <ArduinoJson.h>
 
 // Secretos locales: hardware/wokwi/secrets.h NO se versiona (ver .gitignore de esta carpeta).
-// Copiar secrets.h.example a secrets.h y poner ahí el token nuevo. Sin secrets.h se usa
-// un placeholder que el backend rechaza (no autentica contra producción).
+// Copiar secrets.h.example a secrets.h y poner ahí el token nuevo. Sin secrets.h la
+// compilación se detiene a propósito: el firmware no tiene ningún valor por defecto de token.
 #if __has_include("secrets.h")
   #include "secrets.h"        // define SECRET_DEVICE_TOKEN
 #else
-  #define SECRET_DEVICE_TOKEN "TOKEN_DE_PRUEBA_CAMBIAR_EN_PRODUCCION"
+  #error "Falta hardware/wokwi/secrets.h: copia secrets.h.example y define SECRET_DEVICE_TOKEN (no usar valores por defecto)"
 #endif
 
 // ══════════════════════════════════════════════════════════════════
