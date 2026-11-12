@@ -39,3 +39,7 @@ gcp-key.json
 .env
 .env.*
 
+
+# PostgreSQL local de pruebas: el real NUNCA se sube; el ejemplo si
+.env.postgres
+!.env.postgres.example
