@@ -104,6 +104,8 @@ No se requiere ninguna variable de entorno para correr en local.
 | APP_RATELIMIT_LOGIN_VENTANA | 60 | Duracion de la ventana de login (segundos) |
 | APP_RATELIMIT_REGISTRO_MAX | 10 | Registros permitidos por ventana |
 | APP_RATELIMIT_REGISTRO_VENTANA | 3600 | Duracion de la ventana de registro (segundos) |
+| APP_RATELIMIT_CUENTA_MAX | 5 | Intentos fallidos de login por cuenta (correo normalizado) antes de bloquearla |
+| APP_RATELIMIT_CUENTA_VENTANA | 900 | Ventana del bloqueo por cuenta (segundos). La cuenta queda bloqueada hasta que caduque |
 
 #### Cliente real detras del proxy (X-Real-IP)
 
@@ -131,7 +133,27 @@ que cualquier servicio dentro del patron de confianza podria fijar `X-Real-IP`. 
 patron por defecto solo es seguro si este backend es el unico servicio de su entorno con acceso
 a la red privada.
 
-Limitaciones: el contador vive en memoria (cada instancia cuenta aparte).
+#### Limite por cuenta (login)
+
+Ademas del limite por IP, `POST /auth/login` cuenta los intentos fallidos por correo normalizado
+(minusculas y sin espacios). Al alcanzar `APP_RATELIMIT_CUENTA_MAX` fallos dentro de
+`APP_RATELIMIT_CUENTA_VENTANA` segundos, la cuenta responde **429** con el mismo cuerpo que el
+limite por IP, aunque se envie la contrasena correcta. La comprobacion se hace antes de buscar el
+usuario, asi que una cuenta bloqueada y una inexistente responden igual. Un login correcto borra
+el contador. Una IP no bloquea a otras cuentas; una cuenta bloqueada lo esta desde cualquier IP.
+
+Efecto colateral conocido: quien conoce un correo puede bloquear temporalmente el acceso de esa
+cuenta enviando intentos erroneos (denegacion de servicio por cuenta).
+
+#### Limitaciones y riesgo abierto (instancia unica)
+
+- **Estos contadores funcionan para UNA sola instancia del backend.** Los contadores de IP y de
+  cuenta viven en memoria del proceso. Si el backend corre en mas de una instancia, cada una cuenta
+  por separado y los limites se multiplican por el numero de instancias.
+- Si el backend pasa a varias instancias, los contadores deben moverse a un almacen compartido
+  (por ejemplo PostgreSQL existente). Esa decision requiere aprobacion del propietario; no se
+  anadio Redis ni otra dependencia de infraestructura.
+- Sin reinicios persistentes: al reiniciar el proceso los contadores se pierden.
 
 ### Autenticacion de dispositivo (ESP32)
 
