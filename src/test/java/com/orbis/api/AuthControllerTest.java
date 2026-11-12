@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Tests de integración para autenticación y autorización.
  *
  * Verifica:
- *  - Registro: 201, correo duplicado 400, campos inválidos 400.
+ *  - Registro: 201 uniforme (nuevo o duplicado), campos inválidos 400.
  *  - Login: credenciales correctas 200, incorrectas 401.
  *  - Acceso anónimo a /api/v1/eventos → 401.
  *  - Acceso con sesión a /api/v1/eventos → 200 (paginado).
@@ -46,27 +46,31 @@ class AuthControllerTest {
     // ── Registro ──────────────────────────────────────────────────
 
     @Test @Order(1)
-    @DisplayName("POST /auth/registro → 201 con datos válidos")
+    @DisplayName("POST /auth/registro → 201 con cuerpo uniforme (correo nuevo)")
     void registro_valido() throws Exception {
         mvc.perform(post("/auth/registro")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsString(
                         new RegistroRequest("Usuario A", CORREO_A, PASS))))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.correo").value(CORREO_A))
-                .andExpect(jsonPath("$.mensaje").value("Registro exitoso"));
+                .andExpect(jsonPath("$.status").value(201))
+                .andExpect(jsonPath("$.mensaje").value(
+                        "Solicitud procesada. Inicia sesión para continuar."))
+                .andExpect(jsonPath("$.correo").doesNotExist());
     }
 
     @Test @Order(2)
-    @DisplayName("POST /auth/registro → 400 si correo ya existe")
+    @DisplayName("POST /auth/registro → 201 con el mismo cuerpo si correo ya existe (anti-enumeración)")
     void registro_duplicado() throws Exception {
         // El usuario A ya existe del test anterior
         mvc.perform(post("/auth/registro")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsString(
                         new RegistroRequest("Duplicado", CORREO_A, PASS))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensaje").exists());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value(201))
+                .andExpect(jsonPath("$.mensaje").value(
+                        "Solicitud procesada. Inicia sesión para continuar."));
     }
 
     @Test @Order(3)
