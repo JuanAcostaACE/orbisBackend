@@ -146,20 +146,24 @@ class SeguridadSesionTest {
     }
 
     @Test
-    @DisplayName("Duplicado en registro: 400 con mensaje que no revela la existencia del correo")
+    @DisplayName("Duplicado en registro: 201 con el mismo cuerpo que un correo nuevo, sin revelar el correo")
     void registro_duplicado_mensaje_generico() throws Exception {
         String correo = "dup@test.com";
-        registrar(correo);
+        String cuerpoNuevo = mvc.perform(post("/auth/registro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(new RegistroRequest("Nuevo", correo, PASS))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
 
         MvcResult r = mvc.perform(post("/auth/registro")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsString(new RegistroRequest("Otro", correo, PASS))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.mensaje").exists())
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value(201))
                 .andReturn();
 
         String cuerpo = r.getResponse().getContentAsString();
+        assertThat(cuerpo).isEqualTo(cuerpoNuevo);
         assertThat(cuerpo).doesNotContain("ya está registrado");
         assertThat(cuerpo).doesNotContain(correo);
     }
