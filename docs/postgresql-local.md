@@ -125,7 +125,7 @@ docker compose exec postgres psql -U orbis_test -d orbis_test -c "\d tipo_obstac
 ```
 
 Esperado segun las entidades: `usuarios`, `registro_eventos`, `tipo_obstaculo`.
-Confirmar en `\d registro_eventos` si la columna se llama `etiquetas_ia` (ver seccion 8).
+Confirmar en `\d registro_eventos` si la columna se llama `etiquetasia` (ver seccion 8).
 
 **(c) Scripts SQL de `src/main/resources`.** Segun `application.yaml` **no hay**
 `spring.sql.init` ni `schema-locations`, asi que ninguno de estos scripts se ejecuta al arrancar:
@@ -182,8 +182,8 @@ Clave de verificacion: **[V-code]** comprobado leyendo el codigo o la configurac
    [NV] Como H2 y PostgreSQL aplican cada tipo en la practica.
 7. **Identidad.** [V-code] Las entidades usan `GenerationType.IDENTITY`. El `schema-postgresql.sql`
    usa `BIGSERIAL`. [NV] DDL exacto que genera Hibernate en PostgreSQL.
-8. **Nombre de columna `etiquetas_ia`.** [V-code] El campo `etiquetasIA` se traduce por convencion
-   de Spring a `etiquetas_ia`. El `schema-postgresql.sql` define `etiquetasia`, asi que no coincide.
+8. **Nombre de columna `etiquetasia`.** [V-code] La columna real es `etiquetasia` (sin guion bajo), tal como
+   define `schema-postgresql.sql` y el DDL de Hibernate. No es `etiquetas_ia`, que era el nombre asumido antes.
 9. **Tabla `registro_evento` y `usuario` en la migracion.** [V-code] `migration-fase2-auth.sql` usa
    `registro_evento` y `usuario`; las entidades mapean `registro_eventos` y `usuarios`. Ejecutar la
    migracion fallaria en `REFERENCES usuario(id)` y en `UPDATE registro_evento`.
