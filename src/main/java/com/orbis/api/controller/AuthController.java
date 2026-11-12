@@ -5,6 +5,9 @@ import com.orbis.api.dto.LoginRequest;
 import com.orbis.api.dto.RegistroRequest;
 import com.orbis.api.dto.RegistroResponse;
 import com.orbis.api.service.AuthService;
+import com.orbis.api.service.BloqueoCuentaService;
+import com.orbis.api.service.CuentaBloqueadaException;
+import org.springframework.security.core.AuthenticationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
@@ -35,6 +38,7 @@ public class AuthController {
 
     private final AuthService           authService;
     private final AuthenticationManager authManager;
+    private final BloqueoCuentaService  bloqueoCuenta;
     private final String  cookieNombre;
     private final boolean cookieSecure;
     private final String  cookieSameSite;
@@ -42,11 +46,13 @@ public class AuthController {
     public AuthController(
             AuthService authService,
             AuthenticationManager authManager,
+            BloqueoCuentaService bloqueoCuenta,
             @Value("${server.servlet.session.cookie.name:ORBIS_SID}") String cookieNombre,
             @Value("${server.servlet.session.cookie.secure:false}") boolean cookieSecure,
             @Value("${server.servlet.session.cookie.same-site:Strict}") String cookieSameSite) {
         this.authService = authService;
         this.authManager = authManager;
+        this.bloqueoCuenta = bloqueoCuenta;
         this.cookieNombre = cookieNombre;
         this.cookieSecure = cookieSecure;
         this.cookieSameSite = cookieSameSite;
@@ -69,10 +75,26 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest) {
 
-        // 1. Autenticar con Spring Security (lanza BadCredentialsException si falla)
-        Authentication auth = authManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.correo(), request.contrasena())
-        );
+        // 0. Límite por cuenta: se comprueba ANTES de buscar el usuario, así una cuenta
+        //    bloqueada y una inexistente responden igual (429, mismo cuerpo).
+        String correo = AuthService.normalizarCorreo(request.correo());
+        long segundosBloqueo = bloqueoCuenta.segundosBloqueo(correo);
+        if (segundosBloqueo > 0) {
+            throw new CuentaBloqueadaException(segundosBloqueo);
+        }
+
+        // 1. Autenticar con Spring Security. Cada fallo cuenta para la cuenta.
+        Authentication auth;
+        try {
+            auth = authManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.correo(), request.contrasena())
+            );
+        } catch (AuthenticationException e) {
+            bloqueoCuenta.registrarFallo(correo);
+            throw e;
+        }
+        // Login correcto: se borra el contador de la cuenta
+        bloqueoCuenta.limpiar(correo);
 
         // 2. Protección contra session fixation: si ya existía una sesión (p. ej. anónima
         //    o creada por un atacante), se cambia su ID antes de asociarla al usuario.
