@@ -18,9 +18,8 @@ Nada de lo descrito aqui esta configurado todavia en Railway ni en GitHub. Cada 
 - Usa `actions/setup-java@v4` con Temurin 21 y cache de Maven.
 - Ejecuta `./mvnw -B test` (sin `-Dmaven.test.skip`, sin override de release).
 - Se ejecuta en `push` y `pull_request` contra `main` y `develop`.
-- Antes de ejecutar el wrapper hace `chmod +x ./mvnw`: en git el archivo `mvnw` se guarda como `100644`
-  (sin bit de ejecucion), y en Linux sin ese paso CI falla con "Permission denied".
-  La correccion de fondo es `git update-index --chmod=+x mvnw` (cambio fuera de este documento; hacerlo aparte).
+- `mvnw` esta registrado como `100755` en el indice de git (commit `chore(ci): mvnw ejecutable en el indice`),
+  asi que el workflow ya no hace `chmod`: el indice es la fuente de verdad.
 
 **Problema:** `railway.toml` construye con `./mvnw -Dmaven.test.skip=true -B clean install`.
 Eso significa que Railway puede desplegar un commit con tests rotos, aunque el job de CI falle.
@@ -125,27 +124,75 @@ de usuario ni a la base de datos.
 - Nada de esto se ha compilado para ESP32: no hay toolchain en este entorno. El cambio es de preprocesador
   y de una asignacion de constante; revisar al compilar en el IDE o en Wokwi.
 
-### Rotacion: pasos para el propietario, en orden
+### Rotacion: procedimiento ordenado
 
-**Requiere aprobacion y ejecucion por el propietario.** No pegar el valor nuevo en chats, issues ni commits.
+El token expuesto se considera **comprometido**. Ningun valor real debe quedar en ficheros versionados,
+en chats, en issues ni en la salida de comandos. Todos los pasos los ejecuta el propietario, en este orden.
+No avanzar al paso siguiente si el anterior falla.
 
-1. Revisar en Railway la variable `APP_DEVICE_TOKEN`. Si su valor es el de prueba del sketch, rotar ahora.
-2. Generar un valor nuevo solo en tu maquina, por ejemplo:
+Convenciones de los comandos: `$BACKEND_URL` es la URL base del backend (sin barra final), `$OLD_TOKEN` es el
+valor comprometido y `$NEW_TOKEN` el valor nuevo. Ambas variables se cargan desde el entorno o un gestor de
+contrasenas, nunca se escriben literales en un fichero del repositorio. Usar `read -s` o similar para que
+no queden en el historial de la shell.
+
+1. **Generar el token nuevo en tu maquina**, sin imprimirlo:
 
    ```
-   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   export NEW_TOKEN="$(python -c "import secrets; print(secrets.token_urlsafe(32))")"
    ```
 
-3. En Railway Dashboard > servicio orbisBackend > Variables, cambiar `APP_DEVICE_TOKEN` por el valor nuevo.
-   Railway suele redesplegar al cambiar variables; confirmar que el despliegue termina bien.
-4. En tu copia local del repositorio: `hardware/wokwi/secrets.h.example` -> `hardware/wokwi/secrets.h` y poner
-   el mismo valor en `SECRET_DEVICE_TOKEN`. No copiar `secrets.h` fuera de tu maquina ni a un repositorio.
-5. Cargar el firmware (Wokwi o hardware real) con `secrets.h` presente.
-6. Verificar: una peticion de prueba con el valor antiguo debe ser rechazada (401/403); una con el valor nuevo
-   debe ser aceptada. Hazlo desde tu maquina; no compartir el valor en la salida.
-7. Revisar los logs del backend: el filtro registra "X-Device-Token invalido" (con IP y longitud, no el valor).
-   Tras la rotacion, esos avisos deben corresponder solo a intentos con el valor antiguo.
-8. Ejecutar `git status` antes de cualquier commit y confirmar que `secrets.h` no aparece.
+   Si necesitas verlo para copiarlo a Railway, hazlo en tu terminal local y no lo pegues en ningun chat.
+
+2. **Railway (owner):** en Railway Dashboard > servicio orbisBackend > Variables, cambiar `APP_DEVICE_TOKEN`
+   por el valor de `$NEW_TOKEN`. Esperar a que el redespliegue termine sin errores.
+
+3. **Local:** copiar `hardware/wokwi/secrets.h.example` a `hardware/wokwi/secrets.h` y poner el valor nuevo en
+   `SECRET_DEVICE_TOKEN`. Este fichero **nunca** se commitea (lo excluye `hardware/wokwi/.gitignore`).
+   Comprobar antes de cualquier commit:
+
+   ```
+   git check-ignore -v hardware/wokwi/secrets.h
+   git status --short
+   ```
+
+4. **Reflashear el ESP32** (Wokwi o hardware real) con el `secrets.h` nuevo presente.
+
+5. **Verificar que el token antiguo se rechaza.** Debe devolver 401 o 403 y no crear ningun evento:
+
+   ```
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST "$BACKEND_URL/api/v1/eventos" \
+     -H "Content-Type: application/json" \
+     -H "X-Device-Token: $OLD_TOKEN" \
+     -d '{"modo":"PASIVO","distanciaCm":50}'
+   ```
+
+   Resultado esperado: `401` o `403`. Si devuelve `201`, el token antiguo sigue activo: parar y revisar
+   `APP_DEVICE_TOKEN` en Railway antes de seguir.
+
+6. **Verificar que el token nuevo se acepta.** Debe devolver `201`:
+
+   ```
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST "$BACKEND_URL/api/v1/eventos" \
+     -H "Content-Type: application/json" \
+     -H "X-Device-Token: $NEW_TOKEN" \
+     -d '{"modo":"PASIVO","distanciaCm":50}'
+   ```
+
+   Esta prueba crea un evento real asociado al correo de `APP_DEVICE_OWNER_EMAIL`. Borrarlo desde la
+   aplicacion si no se quiere conservar. Si devuelve otro codigo, revisar el paso 2 (valor copiado mal o
+   redespliegue incompleto) antes de reflashear de nuevo.
+
+7. **Revisar los logs de Railway.** El filtro registra "X-Device-Token invalido" con IP y longitud, nunca el
+   valor. Tras la rotacion esos avisos deben corresponder solo a intentos con el valor antiguo. Si aparecen
+   avisos de otra procedencia, investigarlos antes de dar la rotacion por cerrada.
+
+8. **Reescribir el historial: solo con aprobacion explicita del propietario.** Ver la seccion siguiente.
+   Este paso no forma parte de la rotacion y no se ejecuta por defecto.
+
+Notas:
+
+- Si el paso 5 o el 6 no se pueden ejecutar, la rotacion no esta completa aunque Railway ya tenga el valor nuevo.
+- Los comandos no se han ejecutado en este entorno: no hay acceso a Railway ni al backend desplegado.
 
 ### Reescribir el historial de git
 
@@ -155,6 +202,16 @@ porque cambia el historial compartido, invalida los clones existentes y debe coo
 persona que tenga el repositorio. Tras la rotacion, el valor antiguo ya no tiene efecto, por lo que
 reescribir el historial deja de ser urgente. Hasta entonces, el valor puede seguir leyendose en el historial.
 
+Puntos a tener en cuenta si se decide reescribir:
+
+- Reescribir invalida todos los clones existentes: cada persona debe volver a clonar o hacer reset al nuevo
+  historial. Los forks y las ramas abiertas quedan desalineados.
+- Requiere un force push coordinado a las ramas afectadas, con un momento acordado y las proteccion de rama
+  revisadas (un force push puede estar bloqueado en `main`).
+- Tambien hay que purgar caches de CI y cualquier copia del historial fuera de GitHub.
+- **Esta fase no incluye la reescritura del historial ni el force push.** Queda fuera de alcance hasta que el
+  propietario lo apruebe por escrito.
+
 ---
 
 ## Lo que no se ha verificado
@@ -163,3 +220,6 @@ reescribir el historial deja de ser urgente. Hasta entonces, el valor puede segu
 - La compilacion del firmware para ESP32.
 - El valor actual de `APP_DEVICE_TOKEN` en Railway.
 - El comportamiento de "Wait for CI" en la interfaz actual de Railway.
+- Los comandos `curl` de rotacion (pasos 5 y 6): solo se han revisado en texto, no ejecutados contra el backend.
+- La prueba automatica `HardwareWokwiConsistencyTest` comprueba el sketch y el `.gitignore` de forma estatica;
+  no sustituye a compilar el firmware.
