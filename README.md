@@ -105,9 +105,33 @@ No se requiere ninguna variable de entorno para correr en local.
 | APP_RATELIMIT_REGISTRO_MAX | 10 | Registros permitidos por ventana |
 | APP_RATELIMIT_REGISTRO_VENTANA | 3600 | Duracion de la ventana de registro (segundos) |
 
-Limitaciones: el contador vive en memoria (cada instancia cuenta aparte) y se usa la IP
-de la conexion. Detras de un proxy (Railway, Vercel) todas las peticiones pueden venir
-de la misma IP del proxy; en ese caso el limite es global y no por usuario final.
+#### Cliente real detras del proxy (X-Real-IP)
+
+Detras de un proxy la conexion directa llega desde el proxy, no desde el cliente. Tomcat
+(`RemoteIpValve`, bloque `server.tomcat.remoteip` en `application.yaml`) toma el cliente real
+de la cabecera `X-Real-IP` **solo** si la conexion directa viene de un proxy de confianza.
+`X-Forwarded-For` **no** se usa: un cliente puede falsificarla sin un proxy de confianza.
+Una `X-Real-IP` enviada por un par no confiable se ignora.
+
+| Variable | Por defecto | Descripcion |
+|---|---|---|
+| APP_TRUSTED_PROXIES | loopback y rangos privados (127.x, ::1, 10.x, 172.16-31.x, 192.168.x, IPv6 ULA fc00::/7) | Expresion regular con las IP de conexion de confianza. No usar llaves en el valor. Vacia = no se confia en ningun proxy |
+
+**Verificacion pendiente (operador):** desde el repositorio no se pudo confirmar la IP desde la
+que Railway conecta con el contenedor. Railway no publica rangos fijos para su proxy, y hay
+reportes de IPs en 100.64.0.0/10 (espacio CGNAT) que NO estan en el valor por defecto. Si la IP
+del proxy no entra en el patron, `X-Real-IP` se ignora y el limite vuelve a ser global (el
+comportamiento anterior, sin riesgo de suplantacion). Para confirmarlo tras desplegar: enviar
+`X-Real-IP: 203.0.113.99` a `POST /auth/login` con credenciales erroneas repetidas y revisar en
+los logs la IP que aparece en el aviso "Limite de peticiones alcanzado". Si aparece la IP del
+proxy y no 203.0.113.99, anadir esa IP con `APP_TRUSTED_PROXIES`.
+
+Ademas, el trafico por la red privada de Railway (`*.railway.internal`) no pasa por el edge, asi
+que cualquier servicio dentro del patron de confianza podria fijar `X-Real-IP`. Confiar en el
+patron por defecto solo es seguro si este backend es el unico servicio de su entorno con acceso
+a la red privada.
+
+Limitaciones: el contador vive en memoria (cada instancia cuenta aparte).
 
 ### Autenticacion de dispositivo (ESP32)
 
@@ -226,4 +250,4 @@ orbisBackend/
 | Repositorio | Descripcion |
 |---|---|
 | [orbisBackend](https://github.com/JuanAcostaACE/orbisBackend) | Este repositorio — API REST Java/Spring Boot |
-| [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend) | Panel web (HTML/CSS/JS estatico) |
+| [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend) | Panel web (HTML/CSS/JS estatico) |
