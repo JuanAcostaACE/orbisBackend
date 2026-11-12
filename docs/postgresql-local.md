@@ -207,3 +207,61 @@ Clave de verificacion: **[V-code]** comprobado leyendo el codigo o la configurac
 - Instalar JDK 21 para compilar el proyecto.
 - Ejecutar las secciones 5 y 6 y anotar resultados aqui.
 - Decidir si la migracion `migration-fase2-auth.sql` se corrige antes de cualquier ejecucion.
+
+---
+
+## 10. Resultados de verificacion (2026-11-11)
+
+Entorno: PostgreSQL **16.15** nativo (servicio `postgresql-16`, Windows), base `orbis_test`, rol `orbis_test`,
+escuchando en `localhost:5432`. JDK 21.0.13 (`JAVA_HOME` de Microsoft). Perfil por defecto con
+`DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DRIVER=org.postgresql.Driver` cargados desde `.env.postgres`
+(sin imprimir valores). Commit base: `73b9b45`. Sin Docker; no se uso `docker-compose.yml`.
+
+| # | Paso | Resultado |
+|---|---|---|
+| 1 | Conectividad y tablas previas | **PASS**. `SELECT version()` = PostgreSQL 16.15 (Visual C++ build 1944, 64 bits). `orbis_test` sin tablas antes de arrancar. |
+| 2 | Arranque y `/health` | **PASS**. Log: `HikariPool-1 - Added connection`, `Database driver: PostgreSQL JDBC Driver`, `Database dialect: PostgreSQLDialect`, `Started ApiApplication in 14.161 seconds`. `GET /health` = `{"status":"UP"}`. |
+| 2b | DDL al arrancar | **PASS** (confirma la advertencia). El log muestra `drop table if exists registro_eventos/tipo_obstaculo/usuarios cascade` seguido de los `create table`. Es `create-drop`: en el arranque borra y recrea. |
+| 3 | Tablas y columnas tras arrancar | **PASS** (ver tabla de abajo). Tablas: `usuarios`, `registro_eventos`, `tipo_obstaculo`. No hay otras. |
+| 3b | Columna `etiquetasIA` | **FAIL** en la nota 8 de este documento. La columna real es `etiquetasia` (sin guion bajo), no `etiquetas_ia`. El DDL de Hibernate es `etiquetasia TEXT`. |
+| 4 | Scripts SQL ejecutados al arrancar | **PASS**. Ninguno. El log no contiene lineas de `schema-`, `data-` ni `migration-`, y el perfil por defecto no define `spring.sql.init`. |
+| 5 | Flujo de autenticacion | **PASS**. `POST /auth/registro` = 201. `POST /auth/login` = 200 con cookie `ORBIS_SID`. `GET /auth/me` = 200. `POST /auth/logout` = 200. `GET /auth/me` = 401. En `usuarios` hay exactamente 1 fila para el correo de prueba, `activo = t`, hash con prefijo `$2a$` (BCrypt). |
+| 6 | Flujo de dispositivo | **Parcial**. `APP_DEVICE_TOKEN` y `APP_DEVICE_OWNER_EMAIL` no estan en `.env.postgres`, asi que el flujo de token esta deshabilitado y **no se ha verificado el camino con token (NO VERIFICADO)**. Con sesion: `POST /api/v1/eventos` PASIVO = 201 (`id` 1, `etiquetasIA` null). `POST` ACTIVO con `etiquetasIA` null = 201 (`id` 2, `etiquetasIA` `SIN_IMAGEN`). Las filas de `registro_eventos` coinciden con las respuestas: `modo`, `distancia_cm = 45`, `etiquetasia`, `usuario_id` apuntando al usuario de la sesion. Se uso un segundo usuario de prueba, porque la contrasena del primero no se conservo. |
+| 7 | Revision de `migration-fase2-auth.sql` (solo lectura) | **FAIL** (estatico, no ejecutado). Ver discrepancias abajo. |
+| 8 | Parada y tablas tras parar | **Parcial**. La parada fue forzada (`Stop-Process -Force`), porque el proceso no admite cierre limpio (no hay actuator). Las tres tablas **siguen existiendo** tras la parada: con parada forzada no se ejecutan los hooks de cierre de Spring. El drop por `create-drop` al parar **NO VERIFICADO** con cierre limpio; el drop al arrancar **si** se verifico (paso 2b). |
+
+### Tablas y columnas observadas (tras el arranque)
+
+- `usuarios`: `id` bigint PK identity; `nombre` varchar(60) not null; `correo` varchar(120) not null unique; `hash_contrasena` varchar(255) not null; `activo` boolean not null; `fecha_creacion` timestamp not null.
+- `registro_eventos`: `id` bigint PK identity; `modo` varchar(255) not null; `distancia_cm` double precision; `imagen_url` text; `etiquetasia` text; `tipo_obstaculo_id` bigint FK a `tipo_obstaculo`; `usuario_id` bigint FK a `usuarios`; `fecha_hora` timestamp not null.
+- `tipo_obstaculo`: `id` bigint PK identity; `etiqueta` varchar(255) not null unique; `nivel_peligro` varchar(255).
+
+No hay restricciones CHECK (esperado, nota 10).
+
+### Discrepancias de `migration-fase2-auth.sql` (paso 7)
+
+Nombres de tabla incorrectos. Las tablas reales son `registro_eventos` y `usuarios`:
+
+- Linea 35: `table_name = 'registro_evento'`.
+- Linea 38: `ALTER TABLE registro_evento ... REFERENCES usuario(id)`. Dos errores en la misma linea: `registro_evento` y `usuario`.
+- Lineas 46-47: `ON registro_evento(usuario_id)`.
+- Lineas 49-50: `ON registro_evento(fecha_hora DESC)`.
+- Linea 63: `FROM registro_evento`.
+- Linea 74: `FROM usuario`.
+- Linea 89: `UPDATE registro_evento`.
+- Linea 97: `FROM registro_evento`.
+- Linea 104: `FROM registro_evento`.
+- Linea 108: `table_name = 'registro_evento'`.
+- Linea 112: `ALTER TABLE registro_evento`.
+- Linea 131: `FROM registro_evento r`.
+- Linea 132: `LEFT JOIN usuario u`.
+
+Las columnas `usuario_id`, `fecha_hora`, `correo` y `id` existen con esos nombres. Aviso adicional: la consulta de la linea 35 y la de la linea 108 filtran solo por `table_name` sin `table_schema`. Conviene corregirlas antes de cualquier ejecucion. La migracion **no se ha ejecutado**.
+
+### No verificado
+
+- Perfil `prod` con PostgreSQL real (`ddl-auto: update`). Requiere un arranque con `SPRING_PROFILES_ACTIVE=prod`.
+- Camino de dispositivo con `APP_DEVICE_TOKEN`.
+- Drop de `create-drop` al parar con cierre limpio.
+- Ejecucion de `schema-postgresql.sql`, `data-postgresql.sql` y `migration-fase2-auth.sql`.
+- Docker (no se usó).
