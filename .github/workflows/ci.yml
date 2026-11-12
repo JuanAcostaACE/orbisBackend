@@ -6,9 +6,9 @@ name: CI — Backend
 
 on:
   push:
-    branches: [ main, fase1-seguridad-bugs ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, fase1-seguridad-bugs ]
+    branches: [ main ]
 
 permissions:
   contents: read
