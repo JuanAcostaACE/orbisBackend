@@ -160,13 +160,21 @@ cuenta enviando intentos erroneos (denegacion de servicio por cuenta).
 | Variable | Descripcion |
 |---|---|
 | APP_DEVICE_TOKEN | Token que el ESP32 envia en `X-Device-Token`. |
-| APP_DEVICE_OWNER_EMAIL | Correo del usuario propietario de los eventos del dispositivo. |
+| APP_DEVICE_OWNER_EMAIL | Correo del usuario propietario de los eventos del dispositivo. Obligatorio si `APP_DEVICE_TOKEN` esta definido; debe tener formato de correo valido y pertenecer a un usuario registrado. |
+
+**Regla de arranque:** si `APP_DEVICE_TOKEN` esta definido, `APP_DEVICE_OWNER_EMAIL` tambien
+debe estar definido y tener formato de correo valido. Si falta o es invalido, la aplicacion
+no arranca y el mensaje de error nombra la variable (nunca muestra valores).
 
 **Comportamiento si `APP_DEVICE_TOKEN` esta vacio o no definido:** la autenticacion de
-dispositivo queda deshabilitada de forma silenciosa. El filtro no autentica ninguna
-peticion con `X-Device-Token`, sin error al arrancar ni aviso en logs. Sin token valido,
-`POST /api/v1/eventos` solo acepta una sesion de usuario; el ESP32 recibira 401.
-Verificar que la variable este definida en cada entorno.
+dispositivo queda deshabilitada. El arranque no falla; si `APP_DEVICE_OWNER_EMAIL` esta
+definido, se registra un aviso (WARN) porque no tiene efecto. El filtro no autentica ninguna
+peticion con `X-Device-Token`. Sin token valido, `POST /api/v1/eventos` solo acepta una
+sesion de usuario; el ESP32 recibira 401. Verificar que la variable este definida en cada entorno.
+
+**Propietario no registrado:** si el correo de `APP_DEVICE_OWNER_EMAIL` no corresponde a un
+usuario registrado, una peticion del dispositivo responde 404 con mensaje generico y se
+registra un error en log (sin el correo ni el token).
 
 ### Produccion (Railway + PostgreSQL)
 

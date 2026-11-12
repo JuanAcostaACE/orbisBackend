@@ -10,6 +10,8 @@ import com.orbis.api.repository.RegistroEventoRepository;
 import com.orbis.api.repository.UsuarioRepository;
 import com.orbis.api.state.ContextoSistema;
 import com.orbis.api.strategy.ModoProcesamientoStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -39,6 +41,8 @@ import java.util.Optional;
  */
 @Service
 public class EventoService {
+
+    private static final Logger log = LoggerFactory.getLogger(EventoService.class);
 
     static final int PAGE_SIZE_DEFAULT = 20;
     static final int PAGE_SIZE_MAX     = 100;
@@ -161,8 +165,12 @@ public class EventoService {
 
     private Usuario resolverUsuario(String correo) {
         return usuarioRepository.findByCorreo(correo.toLowerCase())
-                .orElseThrow(() -> new UsernameNotFoundException(
-                        "Usuario propietario no encontrado: " + correo));
+                .orElseThrow(() -> {
+                    // Sin el correo ni el token en el log: revisar APP_DEVICE_OWNER_EMAIL y el registro del propietario
+                    log.error("Propietario de evento no registrado; el evento no se guardó.");
+                    return new UsernameNotFoundException(
+                            "Usuario propietario no encontrado: " + correo);
+                });
     }
 
     /**
