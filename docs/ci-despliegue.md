@@ -1,14 +1,14 @@
 # CI como requisito de despliegue
 
-Este documento describe cómo hacer que el job `tests-backend` (workflow `.github/workflows/ci.yml`) sea un requisito real antes de desplegar el backend en Railway.
+Este documento describe cómo hacer que el job `tests-backend` (workflow "CI — Backend", archivo `.github/workflows/ci.yml`) sea un requisito real antes de desplegar el backend en Railway.
 
-Estado: **preparado, no activado**. El workflow está en el repositorio, pero la protección de rama en GitHub y la espera de CI en Railway deben configurarse a mano por el propietario. Nada de esto se ha aplicado todavía.
+Estado: **preparado, no activado**. El workflow está en el repositorio, pero la regla de rama en GitHub, la espera de CI en Railway y la desactivación de los deploys de PR deben configurarse a mano por el propietario. Nada de esto se ha aplicado todavía. El archivo `railway.toml` no se ha modificado.
 
 ---
 
 ## Qué hace el workflow
 
-- Se ejecuta en `push` y `pull_request` para las ramas `main` y `fase1-seguridad-bugs`.
+- Nombre del workflow: `CI — Backend`. Se ejecuta en `push` y `pull_request` para las ramas `main` y `fase1-seguridad-bugs`.
 - Job `tests-backend` (nombre visible `tests-backend`) en `ubuntu-latest`, con timeout de 20 minutos.
 - JDK 21 Temurin, caché de Maven, y `./mvnw -B test` sin flags de salto de tests.
 - Permisos mínimos (`contents: read`). No usa secretos ni despliega nada.
@@ -16,41 +16,133 @@ Estado: **preparado, no activado**. El workflow está en el repositorio, pero la
 
 ---
 
-## (a) Hacer el job obligatorio en GitHub
+## Verificación local
 
-El nombre que hay que seleccionar es exactamente `tests-backend`. GitHub solo lo ofrece en el selector después de que el job se haya ejecutado al menos una vez en el repositorio, así que hay que hacer primero un push a `fase1-seguridad-bugs` (o abrir un PR) con el workflow ya subido.
+- Build local con tests: `./mvnw -B clean install`, con **144 tests en verde**.
+- El workflow usa `./mvnw -B test`, sin flags de salto de tests. Spring Boot usa H2 cuando `DB_URL` no está definida, por lo que el job no necesita secretos ni base de datos.
+
+---
+
+## 1. Verificación de origen de Railway
+
+En Railway, el servicio `orbisBackend` debe desplegar desde la rama **`main`**.
+
+1. Abrir el proyecto en Railway y entrar en el servicio `orbisBackend`.
+2. Ir a **Settings** y localizar la sección de origen del código (Source / conexión con el repositorio de GitHub). El nombre exacto de la sección y del campo de rama hay que confirmarlo en la UI actual.
+3. Comprobar que la rama configurada es `main`.
+
+Criterio: el campo de rama muestra exactamente `main`.
+
+Si muestra otra rama (por ejemplo `fase1-seguridad-bugs`), cambiarla a `main` antes de activar cualquier otro punto de este documento. Mientras la rama sea otra, Railway desplegará commits que no han pasado por la regla de `main`.
+
+**Esto no se puede verificar desde este repositorio.** La rama de despliegue vive en la configuración de Railway, no en el código.
+
+---
+
+## 2. Desactivar deploys automáticos de PR
+
+Railway puede crear un despliegue para cada pull request. Eso permitiría desplegar un build que todavía no ha pasado CI. Para este servicio esa opción debe estar **desactivada**.
+
+1. En Railway, abrir el proyecto y el entorno (normalmente `production`).
+2. Buscar la opción de deploys de pull requests (PR Deploys o similar; etiqueta a confirmar en la UI actual), normalmente en la configuración del entorno o del servicio.
+3. Desactivarla para `orbisBackend`.
+
+Criterio: con un PR abierto contra `main`, Railway no crea ningún despliegue asociado a ese PR. Esto se comprueba en la pestaña **Deployments** tras la prueba del punto 5.
+
+---
+
+## 3. Ruleset de GitHub para `main`
+
+Pasos exactos (los nombres de menús pueden variar; confirmar en la UI actual):
 
 1. En GitHub, abrir el repositorio y entrar en **Settings > Rules > Rulesets**.
 2. Pulsar **New ruleset > New branch ruleset**.
 3. Nombre: por ejemplo `proteger-main`. **Enforcement status**: `Active`.
-4. En **Target branches**, pulsar **Add target > Include default branch** (o incluir explícitamente `main`).
-5. Activar **Require a pull request before merging**. El número de aprobaciones requeridas puede ser 0 si trabajas en solitario; si quieres exigir revisión, pon 1.
+4. En **Target branches**, pulsar **Add target > Include default branch** o incluir explícitamente `main`.
+5. Activar **Require a pull request before merging**. El número de aprobaciones puede ser 0 si se trabaja en solitario; poner 1 si se quiere exigir revisión.
 6. Activar **Require status checks to pass**:
    - Activar **Require branches to be up to date before merging** (recomendado).
    - Pulsar **Add checks** y seleccionar `tests-backend`.
 7. Activar **Block force pushes** (recomendado).
-8. En **Bypass list**, no añadir a nadie si quieres que se aplique también a administradores. Si la lista está vacía, la regla vale para todos, incluido el propietario.
-9. Pulsar **Create**.
+8. Activar **Block deletions** para que `main` no pueda borrarse.
+9. En **Bypass list**, no añadir a nadie. Con la lista vacía la regla vale para todos, incluido el propietario.
+10. Pulsar **Create**.
 
-Verificación: en un PR hacia `main`, el panel de merge debe mostrar "Required: tests-backend" como pendiente hasta que pase, y el botón de merge debe quedar bloqueado si falla.
+**Nota:** `tests-backend` solo aparece en el selector de checks después de que el workflow se haya ejecutado al menos una vez en un PR o en un push. Si no aparece, hacer primero un push a `fase1-seguridad-bugs` (o abrir un PR) con el workflow subido, esperar a que termine y volver a esta pantalla.
 
-Si ya existe una protección clásica de rama (**Settings > Branches**) sobre `main`, la regla equivalente es **Require status checks to pass before merging** con `tests-backend`. No conviene tener las dos a la vez sin necesidad.
+Verificación: en un PR hacia `main`, el panel de merge debe mostrar `tests-backend` como requisito pendiente hasta que pase, y el botón de merge debe quedar bloqueado si falla.
 
----
-
-## (b) Esperar a CI en Railway
-
-**Importante:** no se ha podido confirmar la etiqueta exacta de esta opción en la interfaz actual de Railway. Hay que verificarla en el panel.
-
-1. En Railway, abrir el proyecto y el servicio `orbisBackend`.
-2. Ir a **Settings** del servicio y buscar la sección de despliegue relacionada con el repositorio de GitHub (source / GitHub repo).
-3. Buscar una opción llamada **"Wait for CI"** (o una etiqueta equivalente que indique esperar a los checks de GitHub antes de desplegar) y activarla.
-4. Confirmar que el servicio está conectado a la rama `main` como rama de despliegue.
-5. Si la interfaz no muestra esa opción, no asumir que existe: el gate en Railway no está activo y solo se protege el merge en GitHub (punto a).
+Si ya existe una protección clásica (**Settings > Branches**) sobre `main`, la regla equivalente es **Require status checks to pass before merging** con `tests-backend`. No conviene tener las dos a la vez sin necesidad.
 
 ---
 
-## (c) Cambio recomendado en `railway.toml` (requiere aprobación del propietario)
+## 4. Procedimiento para comprobar que Railway espera a CI
+
+El objetivo es que Railway no despliegue un commit hasta que `tests-backend` esté en verde.
+
+1. En Railway, en el servicio `orbisBackend`, activar la opción **"Wait for CI"** (etiqueta a confirmar en la UI actual) para la rama `main`.
+2. Si la interfaz no muestra esa opción, no asumir que existe: el gate en Railway **no está activo** y solo queda protegido el merge en GitHub (punto 3).
+3. Abrir un PR hacia `main` con un cambio que pase los tests (por ejemplo, un cambio de documentación).
+4. Esperar a que `tests-backend` termine en verde.
+5. Hacer el merge y comprobar en Railway, en la pestaña **Deployments**, la hora de inicio del despliegue.
+
+Criterio: la hora de inicio del despliegue es **posterior** a la hora de finalización del check `tests-backend` en GitHub (pestaña Checks del PR o de la ejecución del workflow). Si el despliegue empieza antes de que el check termine, el gate no funciona.
+
+---
+
+## 5. Prueba controlada con PR fallido
+
+Hacer esta prueba en una rama desechable. **La rama no debe fusionarse nunca con `main`.**
+
+1. Crear una rama desechable **desde `main`**, por ejemplo `prueba-gate-ci`. No crearla desde `fase1-seguridad-bugs`.
+2. En esa rama, añadir un test deliberadamente roto en `src/test/` (por ejemplo `assertTrue(false)`). Hacerlo solo cuando ningún otro agente o persona esté editando `src/`.
+3. Hacer push de `prueba-gate-ci` y abrir un PR hacia `main`.
+4. Comprobar que:
+   - el check `tests-backend` aparece en rojo;
+   - el botón de merge está bloqueado por el ruleset (punto 3);
+   - Railway no crea ningún despliegue para ese PR ni para ese commit (pestaña **Deployments** sin entradas nuevas; si la opción de espera está activa, no debe iniciarse ningún despliegue).
+5. Cerrar el PR **sin fusionar**.
+6. Borrar la rama `prueba-gate-ci` en GitHub.
+
+**Evidencia a guardar:**
+- Captura de la pestaña Checks del PR con `tests-backend` en rojo.
+- Captura del panel de merge con el botón bloqueado y el requisito `tests-backend` visible.
+- Captura de la lista de **Deployments** de Railway antes y después de la prueba, en la que se vea que no hay despliegue nuevo para el commit del PR.
+- Fecha y hora de cada captura, y el enlace al PR cerrado.
+
+Caso de éxito (opcional, recomendado): un PR normal con tests en verde debe permitir el merge, y Railway debe desplegar solo después de que `tests-backend` pase (punto 4).
+
+---
+
+## 6. Criterios de éxito
+
+El gate funciona si y solo si se cumplen **todos** estos puntos:
+
+- [ ] **(a)** El ruleset bloquea el merge de un PR rojo hacia `main`. Verificado: [ ]
+- [ ] **(b)** Railway no despliega commits cuyo check `tests-backend` no esté en verde. Verificado: [ ]
+- [ ] **(c)** Los deploys automáticos de PR están desactivados para `orbisBackend`. Verificado: [ ]
+- [ ] **(d)** La rama de origen del servicio en Railway es `main`. Verificado: [ ]
+- [ ] **(e)** El despliegue tras un merge en verde se inicia después de que el check `tests-backend` termine. Verificado: [ ]
+
+Hasta que los cinco puntos estén marcados, el gate se considera **no verificado**.
+
+---
+
+## 7. Qué NO protege esta configuración
+
+- **Redeploys manuales.** Un redeploy desde el panel de Railway, un `railway up` o un rollback a un deployment anterior no pasan por CI.
+- **Pushes directos a `main`** si la regla de rama no está activa, o si alguien está en la bypass list. Un push directo puede saltarse el PR y el check.
+- **Cambios en las variables de Railway.** Modificar variables (por ejemplo `DB_URL` o `SPRING_PROFILES_ACTIVE`) no pasa por CI y puede alterar el comportamiento en producción.
+- **Dependencia de la opción "Wait for CI".** Si la opción no existe, cambia de nombre o está desactivada, Railway puede desplegar sin esperar. En ese caso solo queda protegido el merge en GitHub.
+- **El flag de saltar tests en `railway.toml`.** Mientras el `buildCommand` contenga `-Dmaven.test.skip=true`, el build de Railway no ejecuta tests, aunque el gate de CI esté activo. Ver la sección siguiente.
+- **Ramas distintas de `main`.** Si Railway despliega también otras ramas, esas no están cubiertas por la regla.
+- **Tests que no cubren el problema.** El gate solo ejecuta `./mvnw -B test`: no hace análisis estático, no escanea dependencias ni comprueba secretos.
+- **Secretos y configuración real de producción.** El workflow usa H2 y no prueba la configuración real de PostgreSQL de Railway.
+- **Commits ya desplegados.** La regla solo afecta a merges futuros.
+
+---
+
+## Cambio propuesto en `railway.toml` (requiere aprobación del propietario)
 
 **No aplicar sin aprobación.** Este documento solo describe el cambio; el archivo `railway.toml` no se ha modificado.
 
@@ -66,35 +158,6 @@ Cambio propuesto (quitar `-Dmaven.test.skip=true`):
 buildCommand = "chmod +x ./mvnw && ./mvnw -B clean install"
 ```
 
-Motivo: con `-Dmaven.test.skip=true` el build de Railway no compila ni ejecuta tests, así que un build puede generar un JAR desplegable aunque los tests fallen. Si el gate de CI no se aplica (por ejemplo, un despliegue manual o "Wait for CI" desactivado), el build de Railway no tiene ninguna comprobación. Quitar el flag hace que Railway también ejecute los tests antes de desplegar.
+Motivo: con `-Dmaven.test.skip=true` el build de Railway no compila ni ejecuta tests, así que puede generar un JAR desplegable aunque los tests fallen. Si el gate de CI no se aplica (por ejemplo, un despliegue manual o "Wait for CI" desactivado), el build de Railway no tiene ninguna comprobación. Quitar el flag hace que Railway también ejecute los tests antes de desplegar.
 
 Coste: el build de Railway tarda más, y los tests deben pasar también en su entorno (no tiene `DB_URL`, así que usan H2).
-
----
-
-## (d) Cómo comprobar que el gate funciona
-
-Hacer esta prueba en una rama desechable, **que no debe fusionarse nunca con `main`**.
-
-1. Crear una rama desechable desde `fase1-seguridad-bugs`, por ejemplo `prueba-gate-ci`.
-2. Añadir un test deliberadamente roto en `src/test/` (por ejemplo `assertTrue(false)`). Esto implica tocar `src/`, así que hacerlo solo cuando no haya otro agente editando esa carpeta, y en la rama desechable.
-3. Hacer push y abrir un PR de `prueba-gate-ci` hacia `main`.
-4. Comprobar que:
-   - el check `tests-backend` aparece en rojo;
-   - el botón de merge está bloqueado por la regla de rama;
-   - en Railway no aparece ningún despliegue nuevo para ese commit (la pestaña **Deployments** no debe mostrar uno, o debe quedar esperando/cancelado según la opción de espera).
-5. Cerrar el PR sin fusionar y borrar la rama `prueba-gate-ci`.
-
-Para comprobar también el caso de éxito: un PR normal con tests en verde debe permitir el merge, y Railway debe desplegar solo después de que `tests-backend` pase.
-
----
-
-## (e) Qué NO protege esta configuración
-
-- **Despliegues manuales.** Un `railway up`, un redeploy desde el panel o un rollback a un deployment anterior no pasan por CI.
-- **Pushes directos a `main`** si la regla de rama no está activa, o si el propietario está en la bypass list. Un push directo al commit de `main` puede saltarse el PR y el check.
-- **Dependencia de Railway.** El gate depende de que Railway respete el check de GitHub ("Wait for CI"). Si la opción no existe, cambia de nombre o está desactivada, Railway puede desplegar sin esperar. El `buildCommand` sin `-Dmaven.test.skip` (punto c) es una segunda barrera solo si se aprueba.
-- **Ramas distintas de `main`.** Si Railway despliega también otras ramas, esas no están cubiertas por la regla.
-- **Tests que no cubren el problema.** El gate solo ejecuta `./mvnw -B test`: no hace análisis estático, no escanea dependencias ni comprueba secretos.
-- **Secretos de producción.** El workflow usa H2 y no prueba la configuración real de PostgreSQL de Railway.
-- **Commits ya desplegados.** La regla solo afecta a merges futuros.
