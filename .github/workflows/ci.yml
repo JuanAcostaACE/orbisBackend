@@ -1,34 +1,52 @@
 name: CI — Backend
 
+# Gate de calidad previo al despliegue. Este workflow NO despliega nada
+# y no usa secretos. El job "tests-backend" esta pensado para marcarse como
+# required status check en main (ver docs/ci-despliegue.md).
+
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend tests (Java 21 + H2)
+  tests-backend:
+    name: tests-backend
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - name: Set up JDK 21
+      - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: maven
 
-      - name: Run tests (H2, sin secretos de producción)
+      # mvnw debe estar en el indice de git como 100755 (ya verificado).
+      # Sin flags de salto de tests (-DskipTests, -Dmaven.test.skip, etc.).
+      # No se usan DB_URL ni APP_GOOGLE_CLOUD_CREDENTIALS: Spring Boot usa H2
+      # cuando DB_URL no esta definida.
+      - name: Run tests
         run: ./mvnw -B test
-        # No se usan DB_URL ni APP_GOOGLE_CLOUD_CREDENTIALS.
-        # Spring Boot activa H2 automáticamente cuando DB_URL no está definida.
 
-      - name: Upload Surefire report (en caso de fallos)
+      - name: Upload Surefire reports (en caso de fallo)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: surefire-reports
           path: target/surefire-reports/
+          if-no-files-found: ignore
