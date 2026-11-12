@@ -35,6 +35,8 @@ Criterio: el campo de rama muestra exactamente `main`.
 
 Si muestra otra rama (por ejemplo `fase1-seguridad-bugs`), cambiarla a `main` antes de activar cualquier otro punto de este documento. Mientras la rama sea otra, Railway desplegará commits que no han pasado por la regla de `main`.
 
+**Aviso:** cambiar la rama de origen a `main` puede disparar un despliegue inmediato de `main`. Seguir el orden de la sección 4: primero activar **"Wait for CI"**, después cambiar o confirmar la rama, y solo entonces verificar.
+
 **Esto no se puede verificar desde este repositorio.** La rama de despliegue vive en la configuración de Railway, no en el código.
 
 ---
@@ -48,6 +50,16 @@ Railway puede crear un despliegue para cada pull request. Eso permitiría desple
 3. Desactivarla para `orbisBackend`.
 
 Criterio: con un PR abierto contra `main`, Railway no crea ningún despliegue asociado a ese PR. Esto se comprueba en la pestaña **Deployments** tras la prueba del punto 5.
+
+---
+
+## Prerrequisito: ci.yml debe estar en main
+
+`main` todavía contiene la versión antigua de `ci.yml`, cuyos jobs y disparadores no incluyen `tests-backend`. Mientras esa versión siga en `main`, el check `tests-backend` no aparecerá en el selector de checks del ruleset (sección 3) y no habrá nada que Railway pueda esperar (sección 4).
+
+- La fusión del `ci.yml` nuevo (`fase1-seguridad-bugs` hacia `main`) la decide y aprueba el propietario, mediante un PR revisado antes de fusionar.
+- **No está hecha.** Este documento no da por hecho que la fusión haya ocurrido.
+- Hasta que el propietario apruebe y se fusione, no ejecutar las secciones 3 y 5.
 
 ---
 
@@ -68,7 +80,7 @@ Pasos exactos (los nombres de menús pueden variar; confirmar en la UI actual):
 9. En **Bypass list**, no añadir a nadie. Con la lista vacía la regla vale para todos, incluido el propietario.
 10. Pulsar **Create**.
 
-**Nota:** `tests-backend` solo aparece en el selector de checks después de que el workflow se haya ejecutado al menos una vez en un PR o en un push. Si no aparece, hacer primero un push a `fase1-seguridad-bugs` (o abrir un PR) con el workflow subido, esperar a que termine y volver a esta pantalla.
+**Nota:** `tests-backend` solo aparece en el selector de checks después de que el workflow se haya ejecutado al menos una vez. Si no aparece, consultar la sección «Prerrequisito: ci.yml debe estar en main» y volver a esta pantalla cuando se cumpla.
 
 Verificación: en un PR hacia `main`, el panel de merge debe mostrar `tests-backend` como requisito pendiente hasta que pase, y el botón de merge debe quedar bloqueado si falla.
 
@@ -79,6 +91,11 @@ Si ya existe una protección clásica (**Settings > Branches**) sobre `main`, la
 ## 4. Procedimiento para comprobar que Railway espera a CI
 
 El objetivo es que Railway no despliegue un commit hasta que `tests-backend` esté en verde.
+
+**Orden obligatorio (confirmar los nombres de menú en la UI actual):**
+1. Activar primero **"Wait for CI"**.
+2. Después cambiar o confirmar la rama de origen (sección 1). Cambiar la rama a `main` puede disparar un despliegue inmediato de `main`.
+3. Solo entonces, verificar el procedimiento de esta sección.
 
 1. En Railway, en el servicio `orbisBackend`, activar la opción **"Wait for CI"** (etiqueta a confirmar en la UI actual) para la rama `main`.
 2. Si la interfaz no muestra esa opción, no asumir que existe: el gate en Railway **no está activo** y solo queda protegido el merge en GitHub (punto 3).
@@ -110,7 +127,9 @@ Hacer esta prueba en una rama desechable. **La rama no debe fusionarse nunca con
 - Captura de la lista de **Deployments** de Railway antes y después de la prueba, en la que se vea que no hay despliegue nuevo para el commit del PR.
 - Fecha y hora de cada captura, y el enlace al PR cerrado.
 
-Caso de éxito (opcional, recomendado): un PR normal con tests en verde debe permitir el merge, y Railway debe desplegar solo después de que `tests-backend` pase (punto 4).
+### Caso de éxito (obligatorio para el criterio e)
+
+Este caso es obligatorio: sin él, el criterio (e) de la sección 6 no puede verificarse. Un PR normal con tests en verde debe permitir el merge, y Railway debe desplegar ese mismo commit solo después de que `tests-backend` termine en verde (procedimiento del punto 4).
 
 ---
 
@@ -160,4 +179,8 @@ buildCommand = "chmod +x ./mvnw && ./mvnw -B clean install"
 
 Motivo: con `-Dmaven.test.skip=true` el build de Railway no compila ni ejecuta tests, así que puede generar un JAR desplegable aunque los tests fallen. Si el gate de CI no se aplica (por ejemplo, un despliegue manual o "Wait for CI" desactivado), el build de Railway no tiene ninguna comprobación. Quitar el flag hace que Railway también ejecute los tests antes de desplegar.
 
-Coste: el build de Railway tarda más, y los tests deben pasar también en su entorno (no tiene `DB_URL`, así que usan H2).
+Coste: el build de Railway tarda más, y los tests deben pasar también en su entorno.
+
+**Checklist antes de quitar el flag (no verificado; comprobar en Railway):**
+- [ ] Revisar si las variables del servicio (`DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SPRING_PROFILES_ACTIVE`) están expuestas al paso de build.
+- [ ] Si `SPRING_PROFILES_ACTIVE=prod` y `DB_URL` son visibles durante el build, los tests pueden usar el perfil de producción: fallarían o tocarían la base de datos. En ese caso **no quitar el flag** hasta que los tests se configuren para ejecutarse con el perfil por defecto durante el build.
