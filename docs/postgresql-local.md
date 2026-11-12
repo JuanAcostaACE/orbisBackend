@@ -265,3 +265,60 @@ Las columnas `usuario_id`, `fecha_hora`, `correo` y `id` existen con esos nombre
 - Drop de `create-drop` al parar con cierre limpio.
 - Ejecucion de `schema-postgresql.sql`, `data-postgresql.sql` y `migration-fase2-auth.sql`.
 - Docker (no se usó).
+
+---
+
+## 11. Verificacion del perfil prod y del token de dispositivo (2026-11-11)
+
+Commit base: `919528e` (rama `fase1-seguridad-bugs`). PostgreSQL 16 local, base `orbis_test`.
+Los arranques usan `target/classes` mediante un envoltorio de prueba (`Wrap`, fuera del repo) que
+llama a `ApiApplication` sin cambios y cierra el contexto con `ctx.close()` al parar. Motivo: el
+envio de Ctrl+C/Ctrl+Break desde el entorno no llegaba a la JVM, y un cierre forzado no prueba el
+drop al parar. No se modifico codigo ni configuracion del repo.
+
+### CHECK A: perfil `prod`
+
+Variables necesarias: `SPRING_PROFILES_ACTIVE=prod`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
+No hizo falta ningun placeholder. `DB_DRIVER` no se usa en `prod` (el driver esta fijado en el YAML).
+
+| Paso | Resultado |
+|---|---|
+| Conteo antes del arranque | **PASS**. `usuarios` = 2, `registro_eventos` = 2 |
+| Conteo tras arrancar (`ddl-auto: update`) | **PASS**. 2 y 2. Log: `The following 1 profile is active: "prod"`, `Started` en ~20 s |
+| `GET /health` | **PASS**. 200, `status: UP` |
+| Usuario de prueba para login | Se registro `verif-prod@...` con `POST /auth/registro` (201). Hacia falta porque no se conocia la contrasena de los usuarios existentes. Pasa a 3 usuarios |
+| `POST /auth/login` | **PASS**. 200. `Set-Cookie: ORBIS_SID`; atributos `Max-Age=28800; Path=/; Secure; HttpOnly; SameSite=Strict` |
+| `GET /auth/me` con / sin cookie | **PASS**. 200 / 401 |
+| `POST /auth/logout` | **PASS**. 200. Cookie expirada (`Max-Age=0`) con los mismos atributos. `/auth/me` despues = 401 |
+| `/h2-console`, `/h2-console/`, `/h2-console/login.do` | **PASS**. 401 en las tres (no accesible) |
+| Parada ordenada (`ctx.close()`) | **PASS**. Log: `Graceful shutdown complete`, `Closing JPA EntityManagerFactory`, sin SQL de `drop table`. Codigo de salida 0 |
+| Conteo tras parar | **PASS**. 3 y 2, igual que justo antes de parar |
+| Persistencia entre arranques | **PASS**. El usuario creado en la primera ejecucion sigue presente en las dos siguientes (3 usuarios tras cada arranque): no hay drop al arrancar ni al parar |
+
+Incidencia: la primera parada (ejecucion `prodA`) fue forzada (`taskkill /F`) porque el primer
+metodo de parada no funciono. Se repitio la ejecucion y la parada ordenada es la de `prodC`.
+Los `POST /auth/registro` posteriores al primero devolvieron 201 sin crear filas duplicadas.
+
+### CHECK B: perfil por defecto (`create-drop`)
+
+Antes de empezar: `usuarios` = 3 (2 originales + 1 de CHECK A), `registro_eventos` = 2.
+Cada arranque y cada parada borran las tablas. Esto **se perdio** a proposito: los 2 usuarios y los 2 eventos originales ya no existen. Los datos no se pueden recuperar.
+
+| Paso | Resultado |
+|---|---|
+| Arranque con `APP_DEVICE_TOKEN` (valor de 32 bytes, `secrets.token_urlsafe`) y `APP_DEVICE_OWNER_EMAIL` | **PASS**. Arranque OK. Tras arrancar: 0 usuarios y 0 eventos (`create-drop`) |
+| Propietario: registro de `verif-dispositivo@...` con el mismo correo que `APP_DEVICE_OWNER_EMAIL` | 201. Se registra tras el arranque porque las tablas estan vacias |
+| Paso 1: `POST /api/v1/eventos` con `X-Device-Token` correcto y `{"modo":"PASIVO","distanciaCm":45}` | **PASS**. 201. `registro_eventos`: 1 fila con `usuario_id` = 1, que es el propietario |
+| Paso 2: token incorrecto | **PASS**. 401, `{"status":401,"mensaje":"Se requiere autenticación"}`. No se creo evento (sigue en 1) |
+| Paso 3: `APP_DEVICE_TOKEN` definido y `APP_DEVICE_OWNER_EMAIL` vacio | **PASS**. Fallo de arranque, codigo de salida 1. Mensaje: `Configuración de dispositivo incompleta: la variable APP_DEVICE_OWNER_EMAIL es obligatoria cuando APP_DEVICE_TOKEN está definida. Define APP_DEVICE_OWNER_EMAIL con el correo del propietario de los eventos del dispositivo.` |
+| Paso 4: `APP_DEVICE_TOKEN` vacio | **PASS**. Arranque OK. `POST` con un token cualquiera = 401; `POST` sin cabecera = 401 |
+| Parada ordenada tras el paso 2 | **PASS**. Codigo 0. Log: `drop table if exists registro_eventos / tipo_obstaculo / usuarios cascade`. Despues, `usuarios` no existe (confirmado por SQL). Es el comportamiento esperado de `create-drop`, solo valido para `orbis_test` |
+
+Estado final de `orbis_test`: sin tablas (la ultima parada con `create-drop` las borro).
+
+### No verificado
+
+- PostgreSQL de produccion (Railway) y las variables reales de Railway.
+- Arranque y parada con la jar empaquetada y con Ctrl+C real (aqui se uso el envoltorio `Wrap` sobre `target/classes`).
+- Cookie `Secure` a traves del proxy de Vercel, y la cabecera `X-Real-IP` del proxy de Railway.
+- ESP32 fisico enviando `X-Device-Token`.
