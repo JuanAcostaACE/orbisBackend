@@ -7,7 +7,10 @@ import com.orbis.api.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -31,10 +34,21 @@ public class AuthController {
 
     private final AuthService           authService;
     private final AuthenticationManager authManager;
+    private final String  cookieNombre;
+    private final boolean cookieSecure;
+    private final String  cookieSameSite;
 
-    public AuthController(AuthService authService, AuthenticationManager authManager) {
+    public AuthController(
+            AuthService authService,
+            AuthenticationManager authManager,
+            @Value("${server.servlet.session.cookie.name:ORBIS_SID}") String cookieNombre,
+            @Value("${server.servlet.session.cookie.secure:false}") boolean cookieSecure,
+            @Value("${server.servlet.session.cookie.same-site:Strict}") String cookieSameSite) {
         this.authService = authService;
         this.authManager = authManager;
+        this.cookieNombre = cookieNombre;
+        this.cookieSecure = cookieSecure;
+        this.cookieSameSite = cookieSameSite;
     }
 
     /** Registra un nuevo usuario. Devuelve 201 Created. */
@@ -79,13 +93,27 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    /** Cierra la sesión e invalida la cookie JSESSIONID. */
+    /**
+     * Cierra la sesión e invalida la cookie de sesión (ORBIS_SID).
+     * Emite una cookie expirada con los mismos atributos que la de login
+     * para que el navegador la sustituya y la elimine.
+     */
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         if (session != null) session.invalidate();
         SecurityContextHolder.clearContext();
-        return ResponseEntity.ok(Map.of("mensaje", "Sesión cerrada correctamente"));
+
+        ResponseCookie cookieExpirada = ResponseCookie.from(cookieNombre, "")
+                .path("/")
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite(cookieSameSite)
+                .maxAge(0)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, cookieExpirada.toString())
+                .body(Map.of("mensaje", "Sesión cerrada correctamente"));
     }
 
     /** Devuelve el usuario actualmente autenticado. */

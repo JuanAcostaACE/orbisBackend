@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -104,6 +105,22 @@ class SeguridadSesionTest {
 
         mvc.perform(get("/auth/me").session(sesion))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("POST /auth/logout emite Set-Cookie ORBIS_SID con Max-Age=0 para borrar la cookie del navegador")
+    void logout_expira_cookie_en_navegador() throws Exception {
+        String correo = "logoutcookie@test.com";
+        registrar(correo);
+        MockHttpSession sesion = login(correo);
+
+        mvc.perform(post("/auth/logout").session(sesion))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Set-Cookie", containsString("ORBIS_SID=;")))
+                .andExpect(header().string("Set-Cookie", containsString("Max-Age=0")))
+                .andExpect(header().string("Set-Cookie", containsString("Path=/")))
+                .andExpect(header().string("Set-Cookie", containsString("HttpOnly")))
+                .andExpect(header().string("Set-Cookie", containsString("SameSite=Strict")));
     }
 
     @Test
