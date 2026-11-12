@@ -6,10 +6,14 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend tests (Java 21 + H2)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +24,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: maven
+
+      # El bit de ejecución de mvnw no está en el índice de git (100644); sin esto CI falla con "Permission denied".
+      - name: Make Maven wrapper executable
+        run: chmod +x ./mvnw
 
       - name: Run tests (H2, sin secretos de producción)
         run: ./mvnw -B test

@@ -57,6 +57,15 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
+// Secretos locales: hardware/wokwi/secrets.h NO se versiona (ver .gitignore de esta carpeta).
+// Copiar secrets.h.example a secrets.h y poner ahí el token nuevo. Sin secrets.h se usa
+// un placeholder que el backend rechaza (no autentica contra producción).
+#if __has_include("secrets.h")
+  #include "secrets.h"        // define SECRET_DEVICE_TOKEN
+#else
+  #define SECRET_DEVICE_TOKEN "TOKEN_DE_PRUEBA_CAMBIAR_EN_PRODUCCION"
+#endif
+
 // ══════════════════════════════════════════════════════════════════
 //  CONFIGURACIÓN — EDITAR ANTES DE CORRER
 //  ⚠ Para producción: mover a NVS o a un archivo no versionado.
@@ -74,8 +83,8 @@ namespace Cfg {
   const char* ENDPOINT     = "/api/v1/eventos";
 
   // Token de dispositivo. Debe coincidir con APP_DEVICE_TOKEN en Railway.
-  // ⚠ En hardware físico: leer de NVS, nunca dejar el valor real en el sketch.
-  const char* DEVICE_TOKEN = "TOKEN_DE_PRUEBA_CAMBIAR_EN_PRODUCCION";
+  // Viene de secrets.h (no versionado). En hardware físico: leer de NVS.
+  const char* DEVICE_TOKEN = SECRET_DEVICE_TOKEN;
 }
 
 // ══════════════════════════════════════════════════════════════════
