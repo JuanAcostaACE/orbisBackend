@@ -6,8 +6,8 @@ Cada prueba se clasifica como **unitaria**, **simulada**, **integración local**
 
 | Área | Tipo | Cantidad | Estado |
 |---|---|---|---|
-| Backend (suite completa Maven) | Unitaria + integración con H2 | 165 (antes de D-002) | Verde en la rama de captura |
-| Dispositivos (D-002) | Unitaria + integración HTTP | 14 nuevas (servicio y HTTP) | Ver registro de la última ejecución |
+| Backend (suite completa Maven) | Unitaria + integración con H2 | 181 | Verde en feat/captura-fotos (15d92bf) |
+| Dispositivos (D-002) | Unitaria + integración HTTP | 16 (10 servicio, 6 HTTP) | Verde; suite completa 181/181 (commit 15d92bf) |
 | Captura fotográfica | Unitaria + HTTP | 21 | Verde |
 | Panel web (Playwright, cámara) | Simulada (dispositivos falsos en navegador) | K3, K4, K7 10/10; K5 falla; K3c 10/10 | Ver `ORBIS_NEXT_STEPS.md` |
 | Firmware (captura, botón, reintentos) | Simulada (Wokwi/host) | 0 | **Pendiente** |

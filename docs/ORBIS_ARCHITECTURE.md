@@ -32,7 +32,7 @@ Regla fija: **el bastón y la aplicación móvil no se conectan entre sí.** Amb
 |---|---|---|
 | Usuarios, login, sesiones, cuenta bloqueada | Implementado | `orbisBackend` (rama `fase1-seguridad-bugs`) |
 | Eventos de distancia (simulador web y token legado) | Implementado | `POST /api/v1/eventos` |
-| Identidad por dispositivo (D-002) | Implementado (ver commit de la rama de dispositivos) | `DispositivoService`, `DispositivoAuthFilter` |
+| Identidad por dispositivo (D-002) | Implementado (commit 15d92bf en feat/captura-fotos) | `DispositivoService`, `DispositivoAuthFilter` |
 | Recepción de fotografías idempotente | Implementado | `POST /api/v1/dispositivos/capturas` (rama `feat/captura-fotos`) |
 | Procesamiento de IA en segundo plano | **Propuesto** | Worker en el mismo proceso, sin cola externa |
 | Almacenamiento de bytes de imagen | **Propuesto** | Pendiente de decisión del propietario |
