@@ -37,6 +37,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     static final String LOGIN_PATH    = "/auth/login";
     static final String REGISTRO_PATH = "/auth/registro";
+    /** Registro de bastones con código de vinculación (D-002). Código de 39 bits: se limita por IP. */
+    static final String DISPOSITIVO_REGISTRO_PATH = "/api/v1/dispositivos/registro";
 
     /** Cada cuántas entradas nuevas se limpian las ventanas caducadas. */
     private static final int LIMPIEZA_UMBRAL = 5_000;
@@ -44,6 +46,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final boolean enabled;
     private final Regla   login;
     private final Regla   registro;
+    private final Regla   dispositivoRegistro;
 
     private final Map<String, Ventana> ventanas = new ConcurrentHashMap<>();
 
@@ -52,10 +55,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
             @Value("${app.ratelimit.login.max-intentos:10}")        int loginMax,
             @Value("${app.ratelimit.login.ventana-segundos:60}")    long loginVentana,
             @Value("${app.ratelimit.registro.max-intentos:10}")     int registroMax,
-            @Value("${app.ratelimit.registro.ventana-segundos:3600}") long registroVentana) {
+            @Value("${app.ratelimit.registro.ventana-segundos:3600}") long registroVentana,
+            @Value("${app.ratelimit.dispositivo-registro.max-intentos:20}") int dispositivoMax,
+            @Value("${app.ratelimit.dispositivo-registro.ventana-segundos:3600}") long dispositivoVentana) {
         this.enabled  = enabled;
         this.login    = new Regla("login",    loginMax,    loginVentana * 1000L);
         this.registro = new Regla("registro", registroMax, registroVentana * 1000L);
+        this.dispositivoRegistro = new Regla("dispositivo-registro", dispositivoMax, dispositivoVentana * 1000L);
     }
 
     @Override
@@ -111,11 +117,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String ruta = request.getRequestURI();
         if (LOGIN_PATH.equals(ruta))    return login;
         if (REGISTRO_PATH.equals(ruta)) return registro;
+        if (DISPOSITIVO_REGISTRO_PATH.equals(ruta)) return dispositivoRegistro;
         return null;
     }
 
     private void limpiarVentanasCaducadas(long ahora) {
-        long maxVentana = Math.max(login.ventanaMs, registro.ventanaMs);
+        long maxVentana = Math.max(Math.max(login.ventanaMs, registro.ventanaMs), dispositivoRegistro.ventanaMs);
         ventanas.entrySet().removeIf(e -> ahora - e.getValue().inicioMs >= maxVentana);
     }
 

@@ -93,6 +93,28 @@ public class CapturaService {
         }
     }
 
+    /**
+     * Cambia el estado de una captura solo si la transición es válida (EstadoCaptura.puedePasarA).
+     * Un intento inválido lanza IllegalStateException y no modifica la captura.
+     */
+    @Transactional
+    public CapturaFotografia transicionar(Long id, EstadoCaptura destino, String motivo) {
+        CapturaFotografia captura = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Captura inexistente: " + id));
+        if (!captura.getEstado().puedePasarA(destino)) {
+            throw new IllegalStateException(
+                    "Transición no permitida: " + captura.getEstado() + " -> " + destino);
+        }
+        if (captura.getEstado() != destino) {
+            captura.setEstado(destino);
+            captura.setActualizadaEn(LocalDateTime.now());
+        }
+        if (destino == EstadoCaptura.FALLIDA) {
+            captura.setMotivoFallo(motivo);
+        }
+        return repository.save(captura);
+    }
+
     static String sha256Hex(byte[] datos) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(datos));
