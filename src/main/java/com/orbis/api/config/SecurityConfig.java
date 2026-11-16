@@ -82,7 +82,9 @@ public class SecurityConfig {
                 //   /auth/**       → aún no hay sesión en registro/login
                 //   /api/v1/eventos POST → ESP32 usa token propio (no navegador)
                 //   /health        → endpoint de monitoreo
-                .ignoringRequestMatchers("/auth/**", "/api/v1/eventos", "/health")
+                //   /api/v1/dispositivos/capturas → bastón sin sesión (cabecera de token)
+                .ignoringRequestMatchers("/auth/**", "/api/v1/eventos",
+                        "/api/v1/dispositivos/capturas/**", "/health")
             )
 
             // Sesión solo para usuarios web (no para el dispositivo)
@@ -101,6 +103,9 @@ public class SecurityConfig {
                 }
                 // Ingesta del ESP32: requiere ROLE_DEVICE (token) o ROLE_USER (sesión)
                 auth.requestMatchers(HttpMethod.POST, "/api/v1/eventos").hasAnyRole("DEVICE", "USER");
+                // Capturas fotográficas: el bastón (ROLE_DEVICE) sube y consulta; el usuario web también
+                auth.requestMatchers("/api/v1/dispositivos/capturas/**", "/api/v1/dispositivos/capturas")
+                    .hasAnyRole("DEVICE", "USER");
                 // Todo lo demás: solo usuarios web autenticados
                 auth.anyRequest().authenticated();
             })
