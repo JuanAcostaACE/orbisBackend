@@ -1,6 +1,6 @@
 package com.orbis.api.controller;
 
-import com.orbis.api.config.DeviceTokenFilter;
+import com.orbis.api.config.DispositivoAuthFilter;
 import com.orbis.api.model.CapturaFotografia;
 import com.orbis.api.service.CapturaException;
 import com.orbis.api.service.CapturaService;
@@ -87,7 +87,8 @@ public class CapturaController {
     }
 
     private String resolverCorreo(Authentication auth, HttpServletRequest request) {
-        if (auth != null && DeviceTokenFilter.DEVICE_PRINCIPAL.equals(auth.getName())) {
+        // Cualquier principal de dispositivo toma el propietario del atributo del filtro.
+        if (auth != null && auth.getName().startsWith(DispositivoAuthFilter.PREFIJO_PRINCIPAL)) {
             Object owner = request.getAttribute("deviceOwnerEmail");
             if (owner instanceof String email && !email.isBlank()) {
                 return email;
