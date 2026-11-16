@@ -42,6 +42,10 @@ public class CapturaFotografia {
     @Column(nullable = false, length = 20)
     private EstadoCaptura estado;
 
+    /** Motivo cuando el estado es FALLIDA (p. ej. REINICIO_DURANTE_PROCESO, IA_NO_DISPONIBLE). */
+    @Column(name = "motivo_fallo", length = 60)
+    private String motivoFallo;
+
     @Column(name = "recibida_en", nullable = false)
     private LocalDateTime recibidaEn;
 
