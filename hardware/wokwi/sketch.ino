@@ -82,8 +82,9 @@ namespace Cfg {
   const char* BACKEND_URL  = "REEMPLAZAR_CON_URL_DEL_BACKEND";
   const char* ENDPOINT     = "/api/v1/eventos";
 
-  // Token de dispositivo. Debe coincidir con APP_DEVICE_TOKEN en Railway.
+  // Token de dispositivo LEGADO compartido. Debe coincidir con APP_DEVICE_TOKEN en Railway.
   // Viene de secrets.h (no versionado). En hardware físico: leer de NVS.
+  // Pendiente: sustituir por identidad por dispositivo (Bearer). No añadir aquí tokens literales.
   const char* DEVICE_TOKEN = SECRET_DEVICE_TOKEN;
 }
 
@@ -404,6 +405,10 @@ int enviarEventoHTTP(const char* modo, float distancia) {
   http.addHeader("Accept",       "application/json");
   // Autenticación por token de dispositivo (no usa sesión ni cookies).
   // El valor del token NUNCA se imprime.
+  // TEMPORAL: X-Device-Token es un token LEGADO compartido por todos los dispositivos
+  // (DeviceTokenFilter lo valida con APP_DEVICE_TOKEN). El siguiente paso es identidad
+  // por dispositivo con Authorization: Bearer <token por dispositivo>, revocable de forma
+  // individual. Hasta entonces, el token va en secrets.h (no versionado), nunca en el repo.
   http.addHeader("X-Device-Token", Cfg::DEVICE_TOKEN);
 
   Serial.printf("[HTTP] POST %s modo=%s dist=%.1f\n", url.c_str(), modo, distancia);
