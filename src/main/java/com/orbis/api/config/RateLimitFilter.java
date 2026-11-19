@@ -36,6 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     static final String LOGIN_PATH    = "/auth/login";
+    /** Login sin cookies para la app móvil: comparte el mismo límite que /auth/login. */
+    static final String TOKEN_PATH    = "/auth/token";
     static final String REGISTRO_PATH = "/auth/registro";
     /** Registro de bastones con código de vinculación (D-002). Código de 39 bits: se limita por IP. */
     static final String DISPOSITIVO_REGISTRO_PATH = "/api/v1/dispositivos/registro";
@@ -115,7 +117,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return null;
         }
         String ruta = request.getRequestURI();
-        if (LOGIN_PATH.equals(ruta))    return login;
+        if (LOGIN_PATH.equals(ruta) || TOKEN_PATH.equals(ruta)) return login;
         if (REGISTRO_PATH.equals(ruta)) return registro;
         if (DISPOSITIVO_REGISTRO_PATH.equals(ruta)) return dispositivoRegistro;
         return null;

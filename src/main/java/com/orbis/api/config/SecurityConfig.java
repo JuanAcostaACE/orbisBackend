@@ -44,6 +44,7 @@ public class SecurityConfig {
     private final DeviceTokenFilter        deviceTokenFilter;
     private final RateLimitFilter          rateLimitFilter;
     private final DispositivoAuthFilter    dispositivoAuthFilter;
+    private final SesionMovilAuthFilter    sesionMovilAuthFilter;
     private final boolean                  h2ConsolaHabilitada;
 
     public SecurityConfig(OrbisUserDetailsService userDetailsService,
@@ -51,12 +52,14 @@ public class SecurityConfig {
                           DeviceTokenFilter       deviceTokenFilter,
                           RateLimitFilter         rateLimitFilter,
                           DispositivoAuthFilter   dispositivoAuthFilter,
+                          SesionMovilAuthFilter   sesionMovilAuthFilter,
                           @Value("${spring.h2.console.enabled:false}") boolean h2ConsolaHabilitada) {
         this.userDetailsService     = userDetailsService;
         this.corsConfigurationSource = corsConfigurationSource;
         this.deviceTokenFilter      = deviceTokenFilter;
         this.rateLimitFilter        = rateLimitFilter;
         this.dispositivoAuthFilter  = dispositivoAuthFilter;
+        this.sesionMovilAuthFilter  = sesionMovilAuthFilter;
         this.h2ConsolaHabilitada    = h2ConsolaHabilitada;
     }
 
@@ -101,6 +104,8 @@ public class SecurityConfig {
 
             // Autorización de rutas
             .authorizeHttpRequests(auth -> {
+                // Sesión móvil: estas dos rutas exigen autenticación (antes de /auth/** que es público)
+                auth.requestMatchers("/auth/token/yo", "/auth/token/logout").authenticated();
                 // Endpoints públicos mínimos
                 auth.requestMatchers("/auth/**", "/health").permitAll();
                 // Consola H2: solo si el perfil dev la activa explícitamente
@@ -131,6 +136,9 @@ public class SecurityConfig {
 
             // Token propio por dispositivo (Authorization: Bearer), D-002
             .addFilterBefore(dispositivoAuthFilter, UsernamePasswordAuthenticationFilter.class)
+
+            // Token de acceso de la app móvil (Bearer, sesión móvil de 8 h), sin cookies
+            .addFilterBefore(sesionMovilAuthFilter, UsernamePasswordAuthenticationFilter.class)
 
             // Respuestas 401/403 en JSON (sin redirección a login HTML)
             .exceptionHandling(ex -> ex
