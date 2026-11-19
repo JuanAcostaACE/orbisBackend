@@ -17,7 +17,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Flujo HTTP completo del bastón con token propio: registro, config, captura, evento, rotación. */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = "spring.datasource.url=jdbc:h2:mem:dispositivo-http;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE")
+        properties = {
+                "spring.datasource.url=jdbc:h2:mem:dispositivo-http;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+                "app.analisis.activo=false"
+        })
 @AutoConfigureMockMvc
 class DispositivoHttpTest {
 

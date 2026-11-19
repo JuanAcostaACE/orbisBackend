@@ -13,7 +13,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Transiciones de estado y recuperación de capturas en EN_PROCESO tras reinicio (D-003). */
-@SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:recuperacion-capturas;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE")
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:h2:mem:recuperacion-capturas;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+        "app.analisis.activo=false"
+})
 class RecuperacionCapturasTest {
 
     static final String DUENO = "recuperacion-dueno@test.com";

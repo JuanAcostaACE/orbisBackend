@@ -23,7 +23,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         properties = {
                 "spring.datasource.url=jdbc:h2:mem:captura-http;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
                 "app.device.token=token-captura-no-real-0123456789",
-                "app.device.ownerEmail=captura-dueno@test.com"
+                "app.device.ownerEmail=captura-dueno@test.com",
+                // Sin worker: estas pruebas verifican RECIBIDA justo tras recibir la captura.
+                "app.analisis.activo=false"
         })
 @AutoConfigureMockMvc
 class CapturaHttpTest {

@@ -6,9 +6,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * Captura fotográfica enviada por un bastón. Solo guarda metadatos: los bytes de la
- * imagen no se persisten en esta fase (ver docs/ORBIS_NEXT_STEPS.md, pendiente de
- * decisión de almacenamiento).
+ * Captura fotográfica enviada por un bastón. Guarda metadatos, el resultado del análisis
+ * (descripción y etiquetas) y el motivo de fallo. Los bytes de la imagen NO viven aquí: están en
+ * CapturaImagen solo mientras dura el análisis (ver docs/ANALIZADOR_YOLO.md, retención).
  *
  * Idempotencia: (propietario_correo, capture_id) es único. Un reintento con el mismo
  * contenido devuelve la captura existente en lugar de crear otra.
@@ -42,9 +42,17 @@ public class CapturaFotografia {
     @Column(nullable = false, length = 20)
     private EstadoCaptura estado;
 
-    /** Motivo cuando el estado es FALLIDA (p. ej. REINICIO_DURANTE_PROCESO, IA_NO_DISPONIBLE). */
+    /** Motivo cuando el estado es FALLIDA (p. ej. REINICIO_DURANTE_PROCESO, IMAGEN_NO_DECODIFICABLE, IA_NO_DISPONIBLE). */
     @Column(name = "motivo_fallo", length = 60)
     private String motivoFallo;
+
+    /** Descripción en español generada por reglas. Presente cuando el estado es DESCRITA o ENTREGADA. */
+    @Column(name = "descripcion", length = 1000)
+    private String descripcion;
+
+    /** Etiquetas COCO en español separadas por comas (p. ej. "persona,coche"). Vacío si no hay detecciones. */
+    @Column(name = "etiquetas", length = 500)
+    private String etiquetas;
 
     @Column(name = "recibida_en", nullable = false)
     private LocalDateTime recibidaEn;

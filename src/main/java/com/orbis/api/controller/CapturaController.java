@@ -12,6 +12,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -69,16 +71,37 @@ public class CapturaController {
                 .body(cuerpoRespuesta);
     }
 
-    /** Estado de una captura propia. Una captura ajena responde 404 igual que una inexistente. */
+    /**
+     * Estado de una captura propia. Campos añadidos de forma aditiva: descripcion (null hasta DESCRITA),
+     * etiquetas (lista, vacía si no hay), motivoFallo (null salvo en FALLIDA).
+     * Una captura ajena responde 404 igual que una inexistente.
+     */
     @GetMapping("/{captureId}")
-    public ResponseEntity<CapturaRespuesta> estado(
+    public ResponseEntity<CapturaEstadoRespuesta> estado(
             @PathVariable String captureId,
             HttpServletRequest request,
             Authentication auth) {
         return capturaService.obtener(resolverCorreo(auth, request), captureId)
-                .map(c -> ResponseEntity.ok(new CapturaRespuesta(
-                        c.getCaptureId(), c.getEstado().name(), false)))
+                .map(c -> ResponseEntity.ok(new CapturaEstadoRespuesta(
+                        c.getCaptureId(),
+                        c.getEstado().name(),
+                        false,
+                        c.getDescripcion(),
+                        etiquetasDe(c.getEtiquetas()),
+                        c.getMotivoFallo())))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /** Respuesta de consulta de estado: contrato de CapturaRespuesta más campos opcionales. */
+    public record CapturaEstadoRespuesta(String captureId, String estado, boolean duplicada,
+                                         String descripcion, List<String> etiquetas, String motivoFallo) {
+    }
+
+    private static List<String> etiquetasDe(String etiquetas) {
+        if (etiquetas == null || etiquetas.isBlank()) {
+            return List.of();
+        }
+        return Arrays.asList(etiquetas.split(","));
     }
 
     @ExceptionHandler(CapturaException.class)
