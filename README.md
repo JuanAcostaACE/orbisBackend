@@ -1,4 +1,4 @@
-﻿# Orbis Backend
+# Orbis Backend
 
 API REST para **Orbis** — sistema de tecnologia asistiva IoT para personas con discapacidad visual (bastón inteligente con IA).
 
@@ -90,6 +90,11 @@ No se requiere ninguna variable de entorno para correr en local.
 | SPRING_PROFILES_ACTIVE | Perfil Spring activo | prod |
 | GOOGLE_APPLICATION_CREDENTIALS | Ruta al JSON de Service Account GCP | /app/gcp-key.json |
 | PORT | Puerto HTTP (Railway lo inyecta automaticamente) | 8080 |
+| APP_CORS_ORIGIN | URL exacta del frontend (sin `/` final) | https://orbis.vercel.app |
+| APP_DEVICE_TOKEN | Token del ESP32 (32+ caracteres aleatorios) | — |
+| APP_DEVICE_OWNER_EMAIL | Correo del dueño del dispositivo | correo@ejemplo.com |
+| SESSION_COOKIE_SECURE | Cookie solo por HTTPS (en `prod` ya es `true`) | true |
+| SHOW_SQL | Imprimir SQL en el log (solo depuración) | false |
 
 ---
 
@@ -119,7 +124,8 @@ Sin configuracion. El esquema se crea automaticamente al iniciar.
 
 ## Despliegue en Railway
 
-El archivo ailway.toml ya esta configurado. Solo necesitas:
+El archivo 
+ailway.toml ya esta configurado. Solo necesitas:
 1. Conectar este repositorio en Railway
 2. Configurar las variables de entorno en el dashboard de Railway
 3. Railway construye y despliega automaticamente con NIXPACKS
