@@ -63,6 +63,14 @@ public class SecurityConfig {
         this.h2ConsolaHabilitada    = h2ConsolaHabilitada;
     }
 
+    /** Cookie XSRF-TOKEN legible por JS y cabecera X-XSRF-TOKEN (la que usa el frontend). */
+    private static org.springframework.security.web.csrf.CookieCsrfTokenRepository csrfRepository() {
+        org.springframework.security.web.csrf.CookieCsrfTokenRepository repo =
+                org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repo.setHeaderName("X-XSRF-TOKEN");
+        return repo;
+    }
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -81,9 +89,10 @@ public class SecurityConfig {
 
             // CSRF con cookie legible por el SPA (SameSite=Strict lo maneja el navegador)
             .csrf(csrf -> csrf
-                .csrfTokenRepository(
-                    org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse()
-                )
+                .csrfTokenRepository(csrfRepository())
+                // Handler plano: el SPA envía el valor de la cookie tal cual (no enmascarado).
+                // Sin esto, el handler XOR por defecto rechaza las peticiones con sesión (403).
+                .csrfTokenRequestHandler(new org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler())
                 // Ignorar CSRF para:
                 //   /auth/**       → aún no hay sesión en registro/login
                 //   /api/v1/eventos POST → ESP32 usa token propio (no navegador)
