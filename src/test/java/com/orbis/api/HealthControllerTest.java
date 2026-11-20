@@ -27,4 +27,22 @@ class HealthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
     }
+
+    @Test
+    @DisplayName("GET /health identifica el servicio e incluye la hora")
+    void health_cuerpo() throws Exception {
+        mvc.perform(get("/health"))
+                .andExpect(jsonPath("$.servicio").value("ORBIS Backend"))
+                // LocalDateTime.toString(): 2026-11-20T10:00:00(.nnn)
+                .andExpect(jsonPath("$.timestamp").value(
+                        org.hamcrest.Matchers.matchesPattern("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}.*")));
+    }
+
+    @Test
+    @DisplayName("POST /health no está permitido → 405 en JSON")
+    void health_solo_get() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/health"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405));
+    }
 }
