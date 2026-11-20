@@ -281,6 +281,19 @@ orbisBackend/
 
 ---
 
+## Seguridad
+
+- Sesión por cookie HttpOnly `ORBIS_SID` (solo cookie, nunca en la URL) y CSRF con `XSRF-TOKEN`.
+- Contraseñas con BCrypt (costo 12, máximo 72 bytes).
+- CORS con orígenes, métodos y cabeceras explícitos.
+- Cabeceras HSTS, nosniff, Referrer-Policy, Permissions-Policy y CSP.
+- Errores en JSON sin trazas internas (400/401/403/404/405/500).
+- CI con permisos mínimos, Dependabot y CodeQL.
+
+Detalles y cómo reportar vulnerabilidades: [SECURITY.md](SECURITY.md).
+
+---
+
 ## Parte del proyecto Orbis
 
 | Repositorio | Descripcion |
