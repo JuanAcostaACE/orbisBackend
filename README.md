@@ -1,6 +1,6 @@
 ﻿# Orbis Backend
 
-API REST para **Orbis** — sistema de tecnologia asistiva IoT para personas con discapacidad visual (bastón inteligente con IA).
+PI REST para **Orbis** — sistema de tecnologia asistiva IoT para personas con discapacidad visual (bastón inteligente con IA).
 
 > Este repositorio es el **backend** del proyecto Orbis.
 > El frontend se encuentra en: [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend)
@@ -215,7 +215,8 @@ Sin configuracion. El esquema se crea automaticamente al iniciar.
 
 ## Despliegue en Railway
 
-El archivo ailway.toml ya esta configurado. Solo necesitas:
+El archivo 
+ailway.toml ya esta configurado. Solo necesitas:
 1. Conectar este repositorio en Railway
 2. Configurar las variables de entorno en el dashboard de Railway
 3. Railway construye y despliega automaticamente con NIXPACKS
@@ -280,4 +281,4 @@ orbisBackend/
 | Repositorio | Descripcion |
 |---|---|
 | [orbisBackend](https://github.com/JuanAcostaACE/orbisBackend) | Este repositorio — API REST Java/Spring Boot |
-| [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend) | Panel web (HTML/CSS/JS estatico) |
+| [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend) | Panel web (HTML/CSS/JS estatico) |
