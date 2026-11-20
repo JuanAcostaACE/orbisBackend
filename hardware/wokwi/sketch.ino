@@ -32,7 +32,7 @@
  * AUTENTICACIÓN (backend con Spring Security):
  *   El ESP32 envía el header X-Device-Token con el valor de DEVICE_TOKEN.
  *   El token debe almacenarse en NVS en hardware físico (no en el sketch).
- *   Para Wokwi (simulación), se puede dejar un valor de prueba.
+ *   Para Wokwi (simulación), usar un secrets.h local (ver CONFIGURACIÓN abajo).
  *   El token NUNCA se imprime por Serial.
  *
  * SECRETOS:
@@ -57,6 +57,15 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
+// Secretos locales: hardware/wokwi/secrets.h NO se versiona (ver .gitignore de esta carpeta).
+// Copiar secrets.h.example a secrets.h y poner ahí el token nuevo. Sin secrets.h la
+// compilación se detiene a propósito: el firmware no tiene ningún valor por defecto de token.
+#if __has_include("secrets.h")
+  #include "secrets.h"        // define SECRET_DEVICE_TOKEN
+#else
+  #error "Falta hardware/wokwi/secrets.h: copia secrets.h.example y define SECRET_DEVICE_TOKEN (no usar valores por defecto)"
+#endif
+
 // ══════════════════════════════════════════════════════════════════
 //  CONFIGURACIÓN — EDITAR ANTES DE CORRER
 //  ⚠ Para producción: mover a NVS o a un archivo no versionado.
@@ -73,9 +82,10 @@ namespace Cfg {
   const char* BACKEND_URL  = "REEMPLAZAR_CON_URL_DEL_BACKEND";
   const char* ENDPOINT     = "/api/v1/eventos";
 
-  // Token de dispositivo. Debe coincidir con APP_DEVICE_TOKEN en Railway.
-  // ⚠ En hardware físico: leer de NVS, nunca dejar el valor real en el sketch.
-  const char* DEVICE_TOKEN = "TOKEN_DE_PRUEBA_CAMBIAR_EN_PRODUCCION";
+  // Token de dispositivo LEGADO compartido. Debe coincidir con APP_DEVICE_TOKEN en Railway.
+  // Viene de secrets.h (no versionado). En hardware físico: leer de NVS.
+  // Pendiente: sustituir por identidad por dispositivo (Bearer). No añadir aquí tokens literales.
+  const char* DEVICE_TOKEN = SECRET_DEVICE_TOKEN;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -395,6 +405,10 @@ int enviarEventoHTTP(const char* modo, float distancia) {
   http.addHeader("Accept",       "application/json");
   // Autenticación por token de dispositivo (no usa sesión ni cookies).
   // El valor del token NUNCA se imprime.
+  // TEMPORAL: X-Device-Token es un token LEGADO compartido por todos los dispositivos
+  // (DeviceTokenFilter lo valida con APP_DEVICE_TOKEN). El siguiente paso es identidad
+  // por dispositivo con Authorization: Bearer <token por dispositivo>, revocable de forma
+  // individual. Hasta entonces, el token va en secrets.h (no versionado), nunca en el repo.
   http.addHeader("X-Device-Token", Cfg::DEVICE_TOKEN);
 
   Serial.printf("[HTTP] POST %s modo=%s dist=%.1f\n", url.c_str(), modo, distancia);
