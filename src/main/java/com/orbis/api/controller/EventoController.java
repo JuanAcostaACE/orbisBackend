@@ -1,6 +1,7 @@
 package com.orbis.api.controller;
 
 import com.orbis.api.config.DeviceTokenFilter;
+import com.orbis.api.config.DispositivoAuthFilter;
 import com.orbis.api.dto.EventoRequest;
 import com.orbis.api.dto.EventoResponse;
 import com.orbis.api.dto.PaginaResponse;
@@ -108,7 +109,9 @@ public class EventoController {
      * Nunca del cuerpo del request.
      */
     private String resolverCorreo(Authentication auth, HttpServletRequest httpRequest) {
-        if (auth != null && DeviceTokenFilter.DEVICE_PRINCIPAL.equals(auth.getName())) {
+        // Cualquier principal de dispositivo (token legado o token por dispositivo, D-002)
+        // toma el propietario del atributo del filtro, nunca el nombre del principal.
+        if (auth != null && auth.getName().startsWith(DispositivoAuthFilter.PREFIJO_PRINCIPAL)) {
             Object ownerEmail = httpRequest.getAttribute("deviceOwnerEmail");
             if (ownerEmail instanceof String email && !email.isBlank()) {
                 return email;
