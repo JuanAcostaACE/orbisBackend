@@ -31,6 +31,8 @@ server:
         same-site: ${SESSION_COOKIE_SAMESITE:Strict}
         name: ORBIS_SID   # Evitar el nombre por defecto "JSESSIONID" (fingerprinting)
         max-age: 28800    # 8h en segundos
+      # Solo cookie: evita que el id de sesión aparezca en la URL (;jsessionid=...)
+      tracking-modes: cookie
 
 spring:
   # ── Perfil default: H2 en memoria (desarrollo local, sin DB externa) ──
