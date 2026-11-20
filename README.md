@@ -220,8 +220,7 @@ Sin configuracion. El esquema se crea automaticamente al iniciar.
 
 ## Despliegue en Railway
 
-El archivo 
-ailway.toml ya esta configurado. Solo necesitas:
+El archivo `railway.toml` ya esta configurado. Solo necesitas:
 1. Conectar este repositorio en Railway
 2. Configurar las variables de entorno en el dashboard de Railway
 3. Railway construye y despliega automaticamente con NIXPACKS
