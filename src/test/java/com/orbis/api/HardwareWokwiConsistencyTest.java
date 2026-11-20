@@ -11,8 +11,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,11 +34,42 @@ class HardwareWokwiConsistencyTest {
     private static String sketch;
     private static JsonNode conexiones;
 
+    /** Literales de sketch.ino que parecen tokens pero son placeholders permitidos. */
+    private static final Set<String> LITERALES_PERMITIDOS = Set.of("REEMPLAZAR_CON_URL_DEL_BACKEND");
+
+    /** SHA-256 y longitud del token histórico filtrado (no se almacena el valor en claro). */
+    private static final String HASH_TOKEN_HISTORICO =
+            "2cf6010ff38b8b55e34b6fd4b97db9c66b0fcda61ee2b64367929f70ebf85598";
+    private static final int LONGITUD_TOKEN_HISTORICO = 37;
+
     @BeforeAll
     static void cargar() throws IOException {
-        Path base = Path.of(System.getProperty("user.dir"), "hardware", "wokwi");
+        Path base = hardware();
         sketch = Files.readString(base.resolve("sketch.ino"), StandardCharsets.UTF_8);
         conexiones = new ObjectMapper().readTree(base.resolve("diagram.json").toFile()).get("connections");
+    }
+
+    private static Path hardware() {
+        return Path.of(System.getProperty("user.dir"), "hardware", "wokwi");
+    }
+
+    /** Contenido de todos los literales de cadena ("...") de un fuente C/C++ (sin escapes). */
+    private static List<String> literales(String fuente) {
+        List<String> out = new ArrayList<>();
+        Matcher m = Pattern.compile("\"([^\"\\\\]*)\"").matcher(fuente);
+        while (m.find()) out.add(m.group(1));
+        return out;
+    }
+
+    /**
+     * Forma de un token de dispositivo: 20+ caracteres URL-safe con letras Y dígitos.
+     * Un token generado con secrets.token_urlsafe(32) cumple esto con altísima probabilidad.
+     * Textos como "REEMPLAZAR_CON_URL_DEL_BACKEND" o "Wokwi-GUEST" no cumplen.
+     */
+    private static boolean pareceToken(String s) {
+        return s.matches("[A-Za-z0-9_\\-]{20,}")
+                && s.chars().anyMatch(Character::isDigit)
+                && s.chars().anyMatch(Character::isLetter);
     }
 
     private static int entero(String nombre) {
@@ -144,11 +182,97 @@ class HardwareWokwiConsistencyTest {
     // ── Autenticación y secretos ──────────────────────────────────
 
     @Test
-    @DisplayName("Envía X-Device-Token con un placeholder (sin secreto real) y nunca lo imprime")
-    void token_con_placeholder_y_sin_log() {
-        assertThat(sketch).contains("\"X-Device-Token\"");
-        assertThat(sketch).contains("TOKEN_DE_PRUEBA_CAMBIAR_EN_PRODUCCION");
+    @DisplayName("sketch.ino incluye secrets.h, envía X-Device-Token desde ahí y no contiene ningún token literal")
+    void token_leido_de_secrets_h() {
+        assertThat(sketch).contains("#include \"secrets.h\"");
+        assertThat(sketch).contains("#if __has_include(\"secrets.h\")");
+        assertThat(sketch).contains("DEVICE_TOKEN = SECRET_DEVICE_TOKEN");
+        assertThat(sketch).contains("\"X-Device-Token\", Cfg::DEVICE_TOKEN");
+
+        List<String> tokensLiterales = literales(sketch).stream()
+                .filter(HardwareWokwiConsistencyTest::pareceToken)
+                .toList();
+        assertThat(tokensLiterales).as("literales con forma de token en sketch.ino").isEmpty();
+
         assertThat(sketch).doesNotContainPattern("Serial\\.print[^;]*DEVICE_TOKEN");
         assertThat(sketch).contains("REEMPLAZAR_CON_URL_DEL_BACKEND");
+    }
+
+    @Test
+    @DisplayName("Sin secrets.h el firmware no compila: la rama #else es un #error, sin valor por defecto")
+    void sin_secrets_h_falla_al_compilar() {
+        Pattern error = Pattern.compile("#else\\s*\\R\\s*#error \"Falta hardware/wokwi/secrets\\.h: "
+                + "copia secrets\\.h\\.example y define SECRET_DEVICE_TOKEN \\(no usar valores por defecto\\)\"");
+        assertThat(error.matcher(sketch).find()).as("#error en la rama #else de sketch.ino").isTrue();
+        assertThat(sketch).doesNotContain("#define SECRET_DEVICE_TOKEN");
+    }
+
+    @Test
+    @DisplayName("sketch.ino no tiene ningún literal con forma de token (20+ caracteres), salvo el placeholder de URL")
+    void sketch_sin_literal_con_forma_de_token() {
+        List<String> sospechosos = literales(sketch).stream()
+                .filter(s -> s.matches("[A-Za-z0-9_\\-]{20,}") && !LITERALES_PERMITIDOS.contains(s))
+                .toList();
+        assertThat(sospechosos).as("literales con forma de token en sketch.ino").isEmpty();
+    }
+
+    /**
+     * El token de prueba histórico (que estuvo en 812923d y 584f629) NO se escribe aquí: solo se
+     * guarda su SHA-256 y su longitud. Se comprueba que ninguna subcadena de esa longitud dentro de
+     * hardware/ o src/ (salvo este test) tenga ese hash.
+     */
+    @Test
+    @DisplayName("El token de prueba histórico no aparece en hardware/ ni en src/ (comprobado por hash)")
+    void token_historico_no_reaparece() throws IOException, NoSuchAlgorithmException {
+        Path raiz = Path.of(System.getProperty("user.dir"));
+        List<Path> archivos;
+        try (Stream<Path> a = Files.walk(raiz.resolve("hardware"));
+             Stream<Path> b = Files.walk(raiz.resolve("src"))) {
+            archivos = Stream.concat(a, b)
+                    .filter(Files::isRegularFile)
+                    .filter(p -> !p.getFileName().toString().equals("HardwareWokwiConsistencyTest.java"))
+                    .toList();
+        }
+
+        Pattern corrida = Pattern.compile("[A-Za-z0-9_\\-]{" + LONGITUD_TOKEN_HISTORICO + ",}");
+        MessageDigest sha = MessageDigest.getInstance("SHA-256");
+        List<Path> coincidencias = new ArrayList<>();
+        for (Path p : archivos) {
+            String texto = new String(Files.readAllBytes(p), StandardCharsets.ISO_8859_1);
+            Matcher m = corrida.matcher(texto);
+            boolean hallado = false;
+            while (!hallado && m.find()) {
+                String run = m.group();
+                for (int i = 0; i + LONGITUD_TOKEN_HISTORICO <= run.length() && !hallado; i++) {
+                    String ventana = run.substring(i, i + LONGITUD_TOKEN_HISTORICO);
+                    byte[] d = sha.digest(ventana.getBytes(StandardCharsets.ISO_8859_1));
+                    hallado = HexFormat.of().formatHex(d).equals(HASH_TOKEN_HISTORICO);
+                }
+            }
+            if (hallado) coincidencias.add(p);
+        }
+        assertThat(coincidencias).as("archivos que contienen el token histórico").isEmpty();
+    }
+
+    @Test
+    @DisplayName("secrets.h.example solo contiene un placeholder, nunca un token")
+    void secrets_example_solo_placeholder() throws IOException {
+        String ejemplo = Files.readString(hardware().resolve("secrets.h.example"), StandardCharsets.UTF_8);
+
+        Matcher m = Pattern.compile("#define\\s+SECRET_DEVICE_TOKEN\\s+\"([^\"]*)\"").matcher(ejemplo);
+        assertThat(m.find()).as("define SECRET_DEVICE_TOKEN en secrets.h.example").isTrue();
+        assertThat(m.group(1)).as("valor de placeholder").matches("REEMPLAZAR[A-Z_]*");
+
+        assertThat(literales(ejemplo).stream().filter(HardwareWokwiConsistencyTest::pareceToken).toList())
+                .as("literales con forma de token en secrets.h.example").isEmpty();
+    }
+
+    @Test
+    @DisplayName("hardware/wokwi/.gitignore excluye secrets.h (comprobar tambien con git check-ignore)")
+    void gitignore_excluye_secrets_h() throws IOException {
+        List<String> lineas = Files.readAllLines(hardware().resolve(".gitignore"), StandardCharsets.UTF_8).stream()
+                .map(String::trim)
+                .toList();
+        assertThat(lineas).contains("secrets.h");
     }
 }
