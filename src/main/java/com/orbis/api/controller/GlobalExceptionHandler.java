@@ -3,6 +3,7 @@ package com.orbis.api.controller;
 import com.orbis.api.facade.VisionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -29,6 +30,14 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining("; "));
         return ResponseEntity.badRequest()
                 .body(errorBody(400, "Datos de entrada inválidos: " + detalle));
+    }
+
+    /** Cuerpo vacío o JSON mal formado — 400 (antes caía en el 500 genérico). */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleNotReadable(
+            HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+                .body(errorBody(400, "Cuerpo de la petición vacío o mal formado"));
     }
 
     /** Lógica de negocio violada (modo inválido, correo duplicado, etc.) — 400. */
