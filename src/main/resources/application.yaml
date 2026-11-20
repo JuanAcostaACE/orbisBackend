@@ -68,7 +68,8 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: create-drop
-    show-sql: true
+    # Activar con SHOW_SQL=true solo cuando se depura; evita volcar consultas con datos al log
+    show-sql: ${SHOW_SQL:false}
     # Sin 'hibernate.dialect': Spring Boot / Hibernate lo detecta automáticamente
 
   session:
