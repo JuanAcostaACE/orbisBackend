@@ -1,6 +1,6 @@
 ﻿# Orbis Backend
 
-PI REST para **Orbis** — sistema de tecnologia asistiva IoT para personas con discapacidad visual (bastón inteligente con IA).
+API REST para **Orbis** — sistema de tecnologia asistiva IoT para personas con discapacidad visual (bastón inteligente con IA).
 
 > Este repositorio es el **backend** del proyecto Orbis.
 > El frontend se encuentra en: [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend)
