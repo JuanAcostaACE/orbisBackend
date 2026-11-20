@@ -43,3 +43,9 @@ gcp-key.json
 # PostgreSQL local de pruebas: el real NUNCA se sube; el ejemplo si
 .env.postgres
 !.env.postgres.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+hardware/**/secrets.h
