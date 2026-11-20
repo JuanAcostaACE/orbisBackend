@@ -39,7 +39,8 @@ public class CorsConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
+        // Lista explícita en lugar de "*": solo las cabeceras que el SPA envía realmente.
+        config.setAllowedHeaders(List.of("Content-Type", "Accept", "X-XSRF-TOKEN", "X-Requested-With"));
         config.setExposedHeaders(List.of("X-XSRF-TOKEN")); // SPA necesita leer el token CSRF
         config.setAllowCredentials(true);                   // Requerido para la cookie JSESSIONID
         config.setMaxAge(3600L);
