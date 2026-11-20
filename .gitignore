@@ -39,3 +39,9 @@ gcp-key.json
 .env
 .env.*
 
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+hardware/**/secrets.h
