@@ -1,6 +1,9 @@
 package com.orbis.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.*;
+
+import java.nio.charset.StandardCharsets;
 
 /**
  * DTO para POST /auth/registro
@@ -17,7 +20,18 @@ public record RegistroRequest(
         String correo,
 
         @NotBlank(message = "La contraseña es obligatoria")
-        @Size(min = 8, max = 100, message = "La contraseña debe tener entre 8 y 100 caracteres")
+        @Size(min = 8, max = 72, message = "La contraseña debe tener entre 8 y 72 caracteres")
         String contrasena
 
-) {}
+) {
+
+    /** BCrypt solo procesa 72 bytes; con tildes o emojis 72 caracteres pueden superar ese límite. */
+    static final int MAX_BYTES_BCRYPT = 72;
+
+    @JsonIgnore
+    @AssertTrue(message = "La contraseña es demasiado larga (máximo 72 bytes)")
+    public boolean isContrasenaDentroDelLimiteBcrypt() {
+        return contrasena == null
+                || contrasena.getBytes(StandardCharsets.UTF_8).length <= MAX_BYTES_BCRYPT;
+    }
+}

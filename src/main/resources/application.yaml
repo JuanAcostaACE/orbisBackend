@@ -1,6 +1,13 @@
 server:
   port: ${PORT:8080}
 
+  # Las respuestas de error nunca incluyen trazas ni mensajes internos
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    include-exception: false
+
   # ── Cookie de sesión ──
   # PROBLEMA CROSS-DOMAIN:
   #   Vercel (*.vercel.app) y Railway (*.up.railway.app) están en dominios distintos.
@@ -31,6 +38,8 @@ server:
         same-site: ${SESSION_COOKIE_SAMESITE:Strict}
         name: ORBIS_SID   # Evitar el nombre por defecto "JSESSIONID" (fingerprinting)
         max-age: 28800    # 8h en segundos
+      # Solo cookie: evita que el id de sesión aparezca en la URL (;jsessionid=...)
+      tracking-modes: cookie
 
   # ── Cliente real detrás del proxy (Railway) ──
   # RemoteIpValve de Tomcat: el cliente real se toma de X-Real-IP SOLO si la conexión
@@ -59,7 +68,8 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: create-drop
-    show-sql: true
+    # Activar con SHOW_SQL=true solo cuando se depura; evita volcar consultas con datos al log
+    show-sql: ${SHOW_SQL:false}
     # Sin 'hibernate.dialect': Spring Boot / Hibernate lo detecta automáticamente
 
   session:
