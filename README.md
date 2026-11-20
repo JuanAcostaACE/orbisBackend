@@ -186,6 +186,11 @@ registra un error en log (sin el correo ni el token).
 | SPRING_PROFILES_ACTIVE | Perfil Spring activo | prod |
 | GOOGLE_APPLICATION_CREDENTIALS | Ruta al JSON de Service Account GCP | /app/gcp-key.json |
 | PORT | Puerto HTTP (Railway lo inyecta automaticamente) | 8080 |
+| APP_CORS_ORIGIN | URL exacta del frontend (sin `/` final) | https://orbis.vercel.app |
+| APP_DEVICE_TOKEN | Token del ESP32 (32+ caracteres aleatorios) | — |
+| APP_DEVICE_OWNER_EMAIL | Correo del dueño del dispositivo | correo@ejemplo.com |
+| SESSION_COOKIE_SECURE | Cookie solo por HTTPS (en `prod` ya es `true`) | true |
+| SHOW_SQL | Imprimir SQL en el log (solo depuración) | false |
 
 ---
 
@@ -273,6 +278,19 @@ orbisBackend/
 ├── pom.xml
 └── README.md
 ```
+
+---
+
+## Seguridad
+
+- Sesión por cookie HttpOnly `ORBIS_SID` (solo cookie, nunca en la URL) y CSRF con `XSRF-TOKEN`.
+- Contraseñas con BCrypt (costo 12, máximo 72 bytes).
+- CORS con orígenes, métodos y cabeceras explícitos.
+- Cabeceras HSTS, nosniff, Referrer-Policy, Permissions-Policy y CSP.
+- Errores en JSON sin trazas internas (400/401/403/404/405/500).
+- CI con permisos mínimos, Dependabot y CodeQL.
+
+Detalles y cómo reportar vulnerabilidades: [SECURITY.md](SECURITY.md).
 
 ---
 
