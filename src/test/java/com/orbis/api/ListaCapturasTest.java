@@ -155,6 +155,5 @@ class ListaCapturasTest {
         assertFalse(json.contains("sha256"), json);
         assertFalse(json.contains("tamano"), json);
         assertFalse(json.contains("propietario"), json);
-        System.out.println("JSON_EJEMPLO=" + json);
     }
 }

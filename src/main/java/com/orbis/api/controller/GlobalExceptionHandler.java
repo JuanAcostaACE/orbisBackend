@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -98,6 +100,13 @@ public class GlobalExceptionHandler {
             UnsupportedOperationException ex) {
         return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
                 .body(errorBody(501, ex.getMessage()));
+    }
+
+    /** Ruta inexistente — 404 genérico (no es un error interno). */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<Map<String, Object>> handleRutaInexistente(Exception ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(errorBody(404, "Recurso no encontrado"));
     }
 
     /** Fallback: error interno. Se registra en log; el cliente no recibe detalle. */
