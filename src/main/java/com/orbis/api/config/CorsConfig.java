@@ -38,7 +38,8 @@ public class CorsConfig {
 
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(allowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        // La API no expone PUT ni DELETE; no se anuncian en el preflight.
+        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
         // Lista explícita en lugar de "*": solo las cabeceras que el SPA envía realmente.
         config.setAllowedHeaders(List.of("Content-Type", "Accept", "X-XSRF-TOKEN", "X-Requested-With"));
         config.setExposedHeaders(List.of("X-XSRF-TOKEN")); // SPA necesita leer el token CSRF
