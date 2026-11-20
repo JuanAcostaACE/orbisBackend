@@ -31,6 +31,8 @@ server:
         same-site: ${SESSION_COOKIE_SAMESITE:Strict}
         name: ORBIS_SID   # Evitar el nombre por defecto "JSESSIONID" (fingerprinting)
         max-age: 28800    # 8h en segundos
+      # Solo cookie: evita que el id de sesión aparezca en la URL (;jsessionid=...)
+      tracking-modes: cookie
 
   # ── Cliente real detrás del proxy (Railway) ──
   # RemoteIpValve de Tomcat: el cliente real se toma de X-Real-IP SOLO si la conexión
