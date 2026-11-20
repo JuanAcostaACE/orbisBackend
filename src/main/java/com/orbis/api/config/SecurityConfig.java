@@ -140,6 +140,9 @@ public class SecurityConfig {
             // RateLimitFilter: limita intentos de login/registro por IP (429)
             .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
 
+            // Escribe la cookie XSRF-TOKEN en cada petición para que el SPA pueda enviar la cabecera
+            .addFilterAfter(new CsrfCookieFilter(), org.springframework.security.web.csrf.CsrfFilter.class)
+
             // DeviceTokenFilter ANTES del filtro estándar de usuario/contraseña
             .addFilterBefore(deviceTokenFilter, UsernamePasswordAuthenticationFilter.class)
 
