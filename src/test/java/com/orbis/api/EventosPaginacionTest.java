@@ -70,4 +70,15 @@ class EventosPaginacionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tamanioPagina").value(100));
     }
+
+    @Test
+    @DisplayName("size 0 o negativo se corrige a 1")
+    void size_minimo() throws Exception {
+        mvc.perform(get("/api/v1/eventos?size=0").session(sesion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tamanioPagina").value(1));
+        mvc.perform(get("/api/v1/eventos?size=-7").session(sesion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tamanioPagina").value(1));
+    }
 }
