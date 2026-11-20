@@ -70,8 +70,20 @@ cd orbisBackend
 
 # 3. API disponible en:
 # http://localhost:8080/api/v1/eventos
-# http://localhost:8080/h2-console  (solo en modo local)
 ```
+
+### Consola H2 (solo desarrollo explicito)
+
+La consola H2 (`/h2-console`) esta **desactivada** en el perfil por defecto. Solo se activa
+con el perfil `dev` y la variable `H2_CONSOLE_ENABLED=true`:
+
+```bash
+SPRING_PROFILES_ACTIVE=dev H2_CONSOLE_ENABLED=true ./mvnw spring-boot:run
+# Consola: http://localhost:8080/h2-console
+```
+
+En `prod` la consola siempre esta desactivada. La base H2 en memoria sigue siendo el
+almacenamiento local por defecto.
 
 ---
 
@@ -79,6 +91,90 @@ cd orbisBackend
 
 ### Desarrollo local (sin variables — usa H2 en memoria automaticamente)
 No se requiere ninguna variable de entorno para correr en local.
+
+### Limitador de peticiones (login y registro)
+
+`POST /auth/login` y `POST /auth/registro` tienen un limite por IP con ventana fija
+(en memoria). Al superarlo responde **429** con `{status, mensaje, timestamp}` y la cabecera `Retry-After`.
+
+| Variable | Por defecto | Descripcion |
+|---|---|---|
+| APP_RATELIMIT_ENABLED | true | Activa o desactiva el limitador |
+| APP_RATELIMIT_LOGIN_MAX | 10 | Intentos de login permitidos por ventana |
+| APP_RATELIMIT_LOGIN_VENTANA | 60 | Duracion de la ventana de login (segundos) |
+| APP_RATELIMIT_REGISTRO_MAX | 10 | Registros permitidos por ventana |
+| APP_RATELIMIT_REGISTRO_VENTANA | 3600 | Duracion de la ventana de registro (segundos) |
+| APP_RATELIMIT_CUENTA_MAX | 5 | Intentos fallidos de login por cuenta (correo normalizado) antes de bloquearla |
+| APP_RATELIMIT_CUENTA_VENTANA | 900 | Ventana del bloqueo por cuenta (segundos). La cuenta queda bloqueada hasta que caduque |
+
+#### Cliente real detras del proxy (X-Real-IP)
+
+Detras de un proxy la conexion directa llega desde el proxy, no desde el cliente. Tomcat
+(`RemoteIpValve`, bloque `server.tomcat.remoteip` en `application.yaml`) toma el cliente real
+de la cabecera `X-Real-IP` **solo** si la conexion directa viene de un proxy de confianza.
+`X-Forwarded-For` **no** se usa: un cliente puede falsificarla sin un proxy de confianza.
+Una `X-Real-IP` enviada por un par no confiable se ignora.
+
+| Variable | Por defecto | Descripcion |
+|---|---|---|
+| APP_TRUSTED_PROXIES | loopback y rangos privados (127.x, ::1, 10.x, 172.16-31.x, 192.168.x, IPv6 ULA fc00::/7) | Expresion regular con las IP de conexion de confianza. No usar llaves en el valor. Vacia = no se confia en ningun proxy |
+
+**Verificacion pendiente (operador):** desde el repositorio no se pudo confirmar la IP desde la
+que Railway conecta con el contenedor. Railway no publica rangos fijos para su proxy, y hay
+reportes de IPs en 100.64.0.0/10 (espacio CGNAT) que NO estan en el valor por defecto. Si la IP
+del proxy no entra en el patron, `X-Real-IP` se ignora y el limite vuelve a ser global (el
+comportamiento anterior, sin riesgo de suplantacion). Para confirmarlo tras desplegar: enviar
+`X-Real-IP: 203.0.113.99` a `POST /auth/login` con credenciales erroneas repetidas y revisar en
+los logs la IP que aparece en el aviso "Limite de peticiones alcanzado". Si aparece la IP del
+proxy y no 203.0.113.99, anadir esa IP con `APP_TRUSTED_PROXIES`.
+
+Ademas, el trafico por la red privada de Railway (`*.railway.internal`) no pasa por el edge, asi
+que cualquier servicio dentro del patron de confianza podria fijar `X-Real-IP`. Confiar en el
+patron por defecto solo es seguro si este backend es el unico servicio de su entorno con acceso
+a la red privada.
+
+#### Limite por cuenta (login)
+
+Ademas del limite por IP, `POST /auth/login` cuenta los intentos fallidos por correo normalizado
+(minusculas y sin espacios). Al alcanzar `APP_RATELIMIT_CUENTA_MAX` fallos dentro de
+`APP_RATELIMIT_CUENTA_VENTANA` segundos, la cuenta responde **429** con el mismo cuerpo que el
+limite por IP, aunque se envie la contrasena correcta. La comprobacion se hace antes de buscar el
+usuario, asi que una cuenta bloqueada y una inexistente responden igual. Un login correcto borra
+el contador. Una IP no bloquea a otras cuentas; una cuenta bloqueada lo esta desde cualquier IP.
+
+Efecto colateral conocido: quien conoce un correo puede bloquear temporalmente el acceso de esa
+cuenta enviando intentos erroneos (denegacion de servicio por cuenta).
+
+#### Limitaciones y riesgo abierto (instancia unica)
+
+- **Estos contadores funcionan para UNA sola instancia del backend.** Los contadores de IP y de
+  cuenta viven en memoria del proceso. Si el backend corre en mas de una instancia, cada una cuenta
+  por separado y los limites se multiplican por el numero de instancias.
+- Si el backend pasa a varias instancias, los contadores deben moverse a un almacen compartido
+  (por ejemplo PostgreSQL existente). Esa decision requiere aprobacion del propietario; no se
+  anadio Redis ni otra dependencia de infraestructura.
+- Sin reinicios persistentes: al reiniciar el proceso los contadores se pierden.
+
+### Autenticacion de dispositivo (ESP32)
+
+| Variable | Descripcion |
+|---|---|
+| APP_DEVICE_TOKEN | Token que el ESP32 envia en `X-Device-Token`. |
+| APP_DEVICE_OWNER_EMAIL | Correo del usuario propietario de los eventos del dispositivo. Obligatorio si `APP_DEVICE_TOKEN` esta definido; debe tener formato de correo valido y pertenecer a un usuario registrado. |
+
+**Regla de arranque:** si `APP_DEVICE_TOKEN` esta definido, `APP_DEVICE_OWNER_EMAIL` tambien
+debe estar definido y tener formato de correo valido. Si falta o es invalido, la aplicacion
+no arranca y el mensaje de error nombra la variable (nunca muestra valores).
+
+**Comportamiento si `APP_DEVICE_TOKEN` esta vacio o no definido:** la autenticacion de
+dispositivo queda deshabilitada. El arranque no falla; si `APP_DEVICE_OWNER_EMAIL` esta
+definido, se registra un aviso (WARN) porque no tiene efecto. El filtro no autentica ninguna
+peticion con `X-Device-Token`. Sin token valido, `POST /api/v1/eventos` solo acepta una
+sesion de usuario; el ESP32 recibira 401. Verificar que la variable este definida en cada entorno.
+
+**Propietario no registrado:** si el correo de `APP_DEVICE_OWNER_EMAIL` no corresponde a un
+usuario registrado, una peticion del dispositivo responde 404 con mensaje generico y se
+registra un error en log (sin el correo ni el token).
 
 ### Produccion (Railway + PostgreSQL)
 
@@ -184,4 +280,4 @@ orbisBackend/
 | Repositorio | Descripcion |
 |---|---|
 | [orbisBackend](https://github.com/JuanAcostaACE/orbisBackend) | Este repositorio — API REST Java/Spring Boot |
-| [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend) | Panel web (HTML/CSS/JS estatico) |
+| [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend) | Panel web (HTML/CSS/JS estatico) |

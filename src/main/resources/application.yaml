@@ -32,6 +32,17 @@ server:
         name: ORBIS_SID   # Evitar el nombre por defecto "JSESSIONID" (fingerprinting)
         max-age: 28800    # 8h en segundos
 
+  # ── Cliente real detrás del proxy (Railway) ──
+  # RemoteIpValve de Tomcat: el cliente real se toma de X-Real-IP SOLO si la conexión
+  # directa viene de un proxy de confianza (internal-proxies). X-Forwarded-For NO se usa.
+  # Por defecto confía solo en loopback y rangos privados (RFC 1918 y ULA IPv6).
+  # Operador: APP_TRUSTED_PROXIES reemplaza la expresión regular (sin llaves en el valor).
+  # Si la IP del proxy de Railway no entra en ese rango, X-Real-IP se ignora (ver README).
+  tomcat:
+    remoteip:
+      remote-ip-header: X-Real-IP
+      internal-proxies: '${APP_TRUSTED_PROXIES:10[.][0-9]+[.][0-9]+[.][0-9]+|192[.]168[.][0-9]+[.][0-9]+|172[.](1[6-9]|2[0-9]|3[01])[.][0-9]+[.][0-9]+|127[.][0-9]+[.][0-9]+[.][0-9]+|0:0:0:0:0:0:0:1|::1|f[cd][0-9a-f][0-9a-f]:[0-9a-f:]*}'
+
 spring:
   # ── Perfil default: H2 en memoria (desarrollo local, sin DB externa) ──
   datasource:
@@ -41,7 +52,8 @@ spring:
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
   h2:
     console:
-      enabled: true
+      # Desactivada por defecto. Solo se activa con el perfil dev (ver bloque dev más abajo).
+      enabled: false
       path: /h2-console
   jpa:
     open-in-view: false
@@ -70,6 +82,35 @@ app:
     token: ${APP_DEVICE_TOKEN:}
     ownerEmail: ${APP_DEVICE_OWNER_EMAIL:}
 
+  # ── Limitador de peticiones por IP (ventana fija, en memoria) ──
+  # Aplica solo a POST /auth/login y POST /auth/registro. Responde 429 al exceder.
+  # Detrás de un proxy (Railway), la IP es la del proxy: ver README.
+  ratelimit:
+    enabled: ${APP_RATELIMIT_ENABLED:true}
+    login:
+      max-intentos: ${APP_RATELIMIT_LOGIN_MAX:10}
+      ventana-segundos: ${APP_RATELIMIT_LOGIN_VENTANA:60}
+    registro:
+      max-intentos: ${APP_RATELIMIT_REGISTRO_MAX:10}
+      ventana-segundos: ${APP_RATELIMIT_REGISTRO_VENTANA:3600}
+    # Límite por CUENTA (correo normalizado) en login, independiente de la IP.
+    # Tras max-intentos fallos en la ventana, la cuenta responde 429 hasta que caduque.
+    cuenta:
+      max-intentos: ${APP_RATELIMIT_CUENTA_MAX:5}
+      ventana-segundos: ${APP_RATELIMIT_CUENTA_VENTANA:900}
+
+---
+# PERFIL: dev (desarrollo local explícito)
+# Consola H2 solo si se activa también la variable H2_CONSOLE_ENABLED=true.
+# Uso: SPRING_PROFILES_ACTIVE=dev H2_CONSOLE_ENABLED=true
+spring:
+  config:
+    activate:
+      on-profile: dev
+  h2:
+    console:
+      enabled: ${H2_CONSOLE_ENABLED:false}
+
 ---
 # PERFIL: prod (Railway + PostgreSQL)
 # Activar con SPRING_PROFILES_ACTIVE=prod en Railway Dashboard
@@ -96,4 +137,4 @@ server:
     session:
       cookie:
         secure: true          # Railway siempre es HTTPS
-        same-site: Strict     # Funciona con proxy Vercel; cambiar a None si no hay proxy
+        same-site: Strict     # Funciona con proxy Vercel; cambiar a None si no hay proxy

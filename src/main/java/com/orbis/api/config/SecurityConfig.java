@@ -2,6 +2,7 @@ package com.orbis.api.config;
 
 import com.orbis.api.service.OrbisUserDetailsService;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -41,13 +42,19 @@ public class SecurityConfig {
     private final OrbisUserDetailsService  userDetailsService;
     private final CorsConfigurationSource  corsConfigurationSource;
     private final DeviceTokenFilter        deviceTokenFilter;
+    private final RateLimitFilter          rateLimitFilter;
+    private final boolean                  h2ConsolaHabilitada;
 
     public SecurityConfig(OrbisUserDetailsService userDetailsService,
                           CorsConfigurationSource corsConfigurationSource,
-                          DeviceTokenFilter       deviceTokenFilter) {
+                          DeviceTokenFilter       deviceTokenFilter,
+                          RateLimitFilter         rateLimitFilter,
+                          @Value("${spring.h2.console.enabled:false}") boolean h2ConsolaHabilitada) {
         this.userDetailsService     = userDetailsService;
         this.corsConfigurationSource = corsConfigurationSource;
         this.deviceTokenFilter      = deviceTokenFilter;
+        this.rateLimitFilter        = rateLimitFilter;
+        this.h2ConsolaHabilitada    = h2ConsolaHabilitada;
     }
 
     @Bean
@@ -85,16 +92,23 @@ public class SecurityConfig {
             )
 
             // Autorización de rutas
-            .authorizeHttpRequests(auth -> auth
+            .authorizeHttpRequests(auth -> {
                 // Endpoints públicos mínimos
-                .requestMatchers("/auth/**", "/health", "/h2-console/**").permitAll()
+                auth.requestMatchers("/auth/**", "/health").permitAll();
+                // Consola H2: solo si el perfil dev la activa explícitamente
+                if (h2ConsolaHabilitada) {
+                    auth.requestMatchers("/h2-console/**").permitAll();
+                }
                 // Ingesta del ESP32: requiere ROLE_DEVICE (token) o ROLE_USER (sesión)
-                .requestMatchers(HttpMethod.POST, "/api/v1/eventos").hasAnyRole("DEVICE", "USER")
+                auth.requestMatchers(HttpMethod.POST, "/api/v1/eventos").hasAnyRole("DEVICE", "USER");
                 // Todo lo demás: solo usuarios web autenticados
-                .anyRequest().authenticated()
-            )
+                auth.anyRequest().authenticated();
+            })
 
             .userDetailsService(userDetailsService)
+
+            // RateLimitFilter: limita intentos de login/registro por IP (429)
+            .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
 
             // DeviceTokenFilter ANTES del filtro estándar de usuario/contraseña
             .addFilterBefore(deviceTokenFilter, UsernamePasswordAuthenticationFilter.class)
@@ -117,7 +131,7 @@ public class SecurityConfig {
                 })
             )
 
-            // H2 console: solo desarrollo local (frame embebido)
+            // Frames del mismo origen (consola H2 en perfil dev)
             .headers(h -> h.frameOptions(fo -> fo.sameOrigin()));
 
         return http.build();
