@@ -62,4 +62,12 @@ class EventosPaginacionTest {
                 .andExpect(jsonPath("$.paginaActual").value(0))
                 .andExpect(jsonPath("$.tamanioPagina").value(20));
     }
+
+    @Test
+    @DisplayName("size mayor que 100 se limita a 100")
+    void size_maximo() throws Exception {
+        mvc.perform(get("/api/v1/eventos?size=5000").session(sesion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tamanioPagina").value(100));
+    }
 }
