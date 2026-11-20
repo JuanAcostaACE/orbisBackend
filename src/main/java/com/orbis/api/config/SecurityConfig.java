@@ -15,6 +15,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 
 /**
  * Configuración central de Spring Security para ORBIS.
@@ -117,8 +118,22 @@ public class SecurityConfig {
                 })
             )
 
-            // H2 console: solo desarrollo local (frame embebido)
-            .headers(h -> h.frameOptions(fo -> fo.sameOrigin()));
+            // Cabeceras de seguridad.
+            // H2 console: solo desarrollo local (frame embebido) → frame-options sameOrigin.
+            .headers(h -> h
+                .frameOptions(fo -> fo.sameOrigin())
+                .contentTypeOptions(cto -> {})
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31_536_000))
+                .referrerPolicy(rp -> rp.policy(ReferrerPolicy.NO_REFERRER))
+                .permissionsPolicyHeader(pp -> pp.policy(
+                    "camera=(), microphone=(), geolocation=(), payment=()"))
+                .contentSecurityPolicy(csp -> csp.policyDirectives(
+                    // Sin default-src para no romper la consola H2 en desarrollo;
+                    // la API solo devuelve JSON, así que basta con limitar framing/plugins.
+                    "frame-ancestors 'self'; object-src 'none'; base-uri 'none'"))
+            );
 
         return http.build();
     }
