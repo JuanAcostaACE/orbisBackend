@@ -1,6 +1,13 @@
 server:
   port: ${PORT:8080}
 
+  # Las respuestas de error nunca incluyen trazas ni mensajes internos
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    include-exception: false
+
   # ── Cookie de sesión ──
   # PROBLEMA CROSS-DOMAIN:
   #   Vercel (*.vercel.app) y Railway (*.up.railway.app) están en dominios distintos.
