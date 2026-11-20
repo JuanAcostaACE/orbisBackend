@@ -43,18 +43,32 @@ public class SecurityConfig {
     private final CorsConfigurationSource  corsConfigurationSource;
     private final DeviceTokenFilter        deviceTokenFilter;
     private final RateLimitFilter          rateLimitFilter;
+    private final DispositivoAuthFilter    dispositivoAuthFilter;
+    private final SesionMovilAuthFilter    sesionMovilAuthFilter;
     private final boolean                  h2ConsolaHabilitada;
 
     public SecurityConfig(OrbisUserDetailsService userDetailsService,
                           CorsConfigurationSource corsConfigurationSource,
                           DeviceTokenFilter       deviceTokenFilter,
                           RateLimitFilter         rateLimitFilter,
+                          DispositivoAuthFilter   dispositivoAuthFilter,
+                          SesionMovilAuthFilter   sesionMovilAuthFilter,
                           @Value("${spring.h2.console.enabled:false}") boolean h2ConsolaHabilitada) {
         this.userDetailsService     = userDetailsService;
         this.corsConfigurationSource = corsConfigurationSource;
         this.deviceTokenFilter      = deviceTokenFilter;
         this.rateLimitFilter        = rateLimitFilter;
+        this.dispositivoAuthFilter  = dispositivoAuthFilter;
+        this.sesionMovilAuthFilter  = sesionMovilAuthFilter;
         this.h2ConsolaHabilitada    = h2ConsolaHabilitada;
+    }
+
+    /** Cookie XSRF-TOKEN legible por JS y cabecera X-XSRF-TOKEN (la que usa el frontend). */
+    private static org.springframework.security.web.csrf.CookieCsrfTokenRepository csrfRepository() {
+        org.springframework.security.web.csrf.CookieCsrfTokenRepository repo =
+                org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repo.setHeaderName("X-XSRF-TOKEN");
+        return repo;
     }
 
     @Bean
@@ -75,14 +89,20 @@ public class SecurityConfig {
 
             // CSRF con cookie legible por el SPA (SameSite=Strict lo maneja el navegador)
             .csrf(csrf -> csrf
-                .csrfTokenRepository(
-                    org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse()
-                )
+                .csrfTokenRepository(csrfRepository())
+                // Handler plano: el SPA envía el valor de la cookie tal cual (no enmascarado).
+                // Sin esto, el handler XOR por defecto rechaza las peticiones con sesión (403).
+                .csrfTokenRequestHandler(new org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler())
                 // Ignorar CSRF para:
                 //   /auth/**       → aún no hay sesión en registro/login
                 //   /api/v1/eventos POST → ESP32 usa token propio (no navegador)
                 //   /health        → endpoint de monitoreo
-                .ignoringRequestMatchers("/auth/**", "/api/v1/eventos", "/health")
+                //   /api/v1/dispositivos/capturas → bastón sin sesión (cabecera de token)
+                .ignoringRequestMatchers("/auth/**", "/api/v1/eventos",
+                        "/api/v1/dispositivos/capturas/**",
+                        "/api/v1/dispositivos/registro",
+                        "/api/v1/dispositivos/token/rotar",
+                        "/health")
             )
 
             // Sesión solo para usuarios web (no para el dispositivo)
@@ -93,6 +113,8 @@ public class SecurityConfig {
 
             // Autorización de rutas
             .authorizeHttpRequests(auth -> {
+                // Sesión móvil: estas dos rutas exigen autenticación (antes de /auth/** que es público)
+                auth.requestMatchers("/auth/token/yo", "/auth/token/logout").authenticated();
                 // Endpoints públicos mínimos
                 auth.requestMatchers("/auth/**", "/health").permitAll();
                 // Consola H2: solo si el perfil dev la activa explícitamente
@@ -101,6 +123,14 @@ public class SecurityConfig {
                 }
                 // Ingesta del ESP32: requiere ROLE_DEVICE (token) o ROLE_USER (sesión)
                 auth.requestMatchers(HttpMethod.POST, "/api/v1/eventos").hasAnyRole("DEVICE", "USER");
+                // Capturas fotográficas: el bastón (ROLE_DEVICE) sube y consulta; el usuario web también
+                auth.requestMatchers("/api/v1/dispositivos/capturas/**", "/api/v1/dispositivos/capturas")
+                    .hasAnyRole("DEVICE", "USER");
+                // Registro de bastón: sin sesión; el código de vinculación es la prueba
+                auth.requestMatchers(HttpMethod.POST, "/api/v1/dispositivos/registro").permitAll();
+                // Rotación y configuración: solo el propio bastón con su token
+                auth.requestMatchers(HttpMethod.POST, "/api/v1/dispositivos/token/rotar").hasRole("DEVICE");
+                auth.requestMatchers(HttpMethod.GET, "/api/v1/dispositivos/config").hasRole("DEVICE");
                 // Todo lo demás: solo usuarios web autenticados
                 auth.anyRequest().authenticated();
             })
@@ -110,8 +140,17 @@ public class SecurityConfig {
             // RateLimitFilter: limita intentos de login/registro por IP (429)
             .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
 
+            // Escribe la cookie XSRF-TOKEN en cada petición para que el SPA pueda enviar la cabecera
+            .addFilterAfter(new CsrfCookieFilter(), org.springframework.security.web.csrf.CsrfFilter.class)
+
             // DeviceTokenFilter ANTES del filtro estándar de usuario/contraseña
             .addFilterBefore(deviceTokenFilter, UsernamePasswordAuthenticationFilter.class)
+
+            // Token propio por dispositivo (Authorization: Bearer), D-002
+            .addFilterBefore(dispositivoAuthFilter, UsernamePasswordAuthenticationFilter.class)
+
+            // Token de acceso de la app móvil (Bearer, sesión móvil de 8 h), sin cookies
+            .addFilterBefore(sesionMovilAuthFilter, UsernamePasswordAuthenticationFilter.class)
 
             // Respuestas 401/403 en JSON (sin redirección a login HTML)
             .exceptionHandling(ex -> ex
