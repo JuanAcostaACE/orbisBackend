@@ -81,4 +81,20 @@ class EventosPaginacionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tamanioPagina").value(1));
     }
+
+    @Test
+    @DisplayName("page negativa se corrige a 0")
+    void page_negativa() throws Exception {
+        mvc.perform(get("/api/v1/eventos?page=-3").session(sesion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paginaActual").value(0));
+    }
+
+    @Test
+    @DisplayName("page no numérica → 400 en JSON")
+    void page_no_numerica() throws Exception {
+        mvc.perform(get("/api/v1/eventos?page=uno").session(sesion))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
 }
