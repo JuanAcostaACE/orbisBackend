@@ -9,6 +9,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -38,6 +39,14 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest()
                 .body(errorBody(400, "Cuerpo de la petición vacío o mal formado"));
+    }
+
+    /** Parámetro de ruta o query con tipo inválido (p. ej. /eventos/abc) — 400. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.badRequest()
+                .body(errorBody(400, "Parámetro con formato inválido: " + ex.getName()));
     }
 
     /** Lógica de negocio violada (modo inválido, correo duplicado, etc.) — 400. */
