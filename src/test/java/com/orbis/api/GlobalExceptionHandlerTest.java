@@ -6,8 +6,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -34,10 +41,18 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("Id no numérico en /api/v1/eventos/{id} → 400")
     void id_no_numerico() throws Exception {
-        mvc.perform(get("/api/v1/eventos/abc"))
+        // La API autentica por sesión (HttpSessionSecurityContextRepository); @WithMockUser
+        // no llega al filtro, así que se coloca el contexto en la sesión como haría el login.
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                "usuario@test.com", null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+        MockHttpSession sesion = new MockHttpSession();
+        sesion.setAttribute(
+                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, ctx);
+
+        mvc.perform(get("/api/v1/eventos/abc").session(sesion))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
     }
