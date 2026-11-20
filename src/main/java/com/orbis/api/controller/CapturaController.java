@@ -1,6 +1,7 @@
 package com.orbis.api.controller;
 
 import com.orbis.api.config.DispositivoAuthFilter;
+import com.orbis.api.dto.PaginaResponse;
 import com.orbis.api.model.CapturaFotografia;
 import com.orbis.api.service.CapturaException;
 import com.orbis.api.service.CapturaService;
@@ -12,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +71,28 @@ public class CapturaController {
         return ResponseEntity
                 .status(resultado.duplicada() ? HttpStatus.OK : HttpStatus.ACCEPTED)
                 .body(cuerpoRespuesta);
+    }
+
+    /** Elemento del listado: sin correo del propietario, sha256 ni tamaño. */
+    public record CapturaResumen(String captureId, String estado, String descripcion,
+                                 List<String> etiquetas, String motivoFallo, LocalDateTime recibidaEn) {
+    }
+
+    /** Capturas del propietario autenticado, más recientes primero (size por defecto 20, máximo 50). */
+    @GetMapping
+    public PaginaResponse<CapturaResumen> listar(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            HttpServletRequest request,
+            Authentication auth) {
+        return PaginaResponse.of(capturaService.listar(resolverCorreo(auth, request), page, size)
+                .map(c -> new CapturaResumen(
+                        c.getCaptureId(),
+                        c.getEstado().name(),
+                        c.getDescripcion(),
+                        etiquetasDe(c.getEtiquetas()),
+                        c.getMotivoFallo(),
+                        c.getRecibidaEn())));
     }
 
     /**

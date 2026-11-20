@@ -7,6 +7,8 @@ import com.orbis.api.repository.CapturaFotografiaRepository;
 import com.orbis.api.repository.CapturaImagenRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -87,6 +89,18 @@ public class CapturaService {
     @Transactional(readOnly = true)
     public Optional<CapturaFotografia> obtener(String propietarioCorreo, String captureId) {
         return repository.findByPropietarioCorreoAndCaptureId(propietarioCorreo, captureId);
+    }
+
+    public static final int TAMANO_PAGINA_DEFECTO = 20;
+    public static final int TAMANO_PAGINA_MAXIMO = 50;
+
+    /** Capturas del propietario, más recientes primero. page mínimo 0; size por defecto 20 y máximo 50. */
+    @Transactional(readOnly = true)
+    public Page<CapturaFotografia> listar(String propietarioCorreo, int page, int size) {
+        int pagina = Math.max(page, 0);
+        int tamano = size < 1 ? TAMANO_PAGINA_DEFECTO : Math.min(size, TAMANO_PAGINA_MAXIMO);
+        return repository.findByPropietarioCorreoOrderByRecibidaEnDesc(
+                propietarioCorreo, PageRequest.of(pagina, tamano));
     }
 
     /** Bytes de la captura si aún están dentro de la retención. Nunca devuelve bytes caducados. */
