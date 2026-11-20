@@ -6,8 +6,11 @@ Lista paginada de los eventos del usuario autenticado. No es posible ver eventos
 
 | Parámetro | Por defecto | Notas |
 |---|---|---|
-| `page` | 0 | base 0 |
-| `size` | 20 | máximo 100 |
+| `page` | 0 | base 0; un valor negativo se trata como 0 |
+| `size` | 20 | se ajusta al rango 1–100 (p. ej. `size=5000` devuelve 100 por página) |
+
+Un valor no numérico (`page=uno`) responde **400** con el formato de [errores](errores.md).
+Sin sesión responde **401**.
 
 ## Respuesta 200
 
