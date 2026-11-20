@@ -59,7 +59,9 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        // Factor 12 (por defecto 10): ~4x más costoso por intento de fuerza bruta.
+        // Los hashes existentes con factor 10 se siguen validando sin migración.
+        return new BCryptPasswordEncoder(12);
     }
 
     @Bean
