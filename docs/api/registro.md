@@ -1,23 +1,23 @@
-# POST /auth/registro
+# POST /auth/register
 
 Crea un usuario. Público, sin CSRF.
 
 ## Cuerpo
 
 ```json
-{ "nombre": "Ana Pérez", "correo": "ana@ejemplo.com", "contrasena": "minimo8caracteres" }
+{ "name": "Ana Pérez", "email": "ana@ejemplo.com", "password": "minimo8caracteres" }
 ```
 
 | Campo | Reglas |
 |---|---|
-| `nombre` | obligatorio, 2–60 caracteres |
-| `correo` | obligatorio, formato email, máx. 120 |
-| `contrasena` | obligatorio, 8–100 caracteres; se guarda con BCrypt |
+| `name` | obligatorio, 2–60 caracteres |
+| `email` | obligatorio, formato email, máx. 120 |
+| `password` | obligatorio, 8–100 caracteres; se guarda con BCrypt |
 
 ## Respuesta 201
 
 ```json
-{ "id": 1, "nombre": "Ana Pérez", "correo": "ana@ejemplo.com", "mensaje": "Registro exitoso" }
+{ "id": 1, "name": "Ana Pérez", "email": "ana@ejemplo.com", "message": "Registro exitoso" }
 ```
 
 ## Errores
