@@ -3,26 +3,29 @@
 -- Ejecutar en Railway/Supabase antes del primer deploy
 -- (Hibernate con ddl-auto: update también crea las tablas,
 --  pero este script siembra los datos iniciales)
+--
+-- Base de datos existente con nombres en español (registro_eventos,
+-- tipo_obstaculo, usuarios): ejecutar antes migration-english-names.sql.
 -- ══════════════════════════════════════════════════════
 
 -- Tabla de tipos de obstáculo (catálogo)
-CREATE TABLE IF NOT EXISTS tipo_obstaculo (
+CREATE TABLE IF NOT EXISTS obstacle_types (
     id           BIGSERIAL PRIMARY KEY,
-    etiqueta     VARCHAR(100) NOT NULL UNIQUE,
-    nivel_peligro VARCHAR(10) CHECK (nivel_peligro IN ('ALTO', 'MEDIO', 'BAJO'))
+    label        VARCHAR(100) NOT NULL UNIQUE,
+    danger_level VARCHAR(10) CHECK (danger_level IN ('HIGH', 'MEDIUM', 'LOW'))
 );
 
 -- Tabla principal de eventos del SmartCane
-CREATE TABLE IF NOT EXISTS registro_eventos (
+CREATE TABLE IF NOT EXISTS event_records (
     id               BIGSERIAL PRIMARY KEY,
-    modo             VARCHAR(20) NOT NULL CHECK (modo IN ('PASIVO', 'ACTIVO')),
-    distancia_cm     DOUBLE PRECISION,
-    imagen_url       TEXT,
-    etiquetasia      TEXT,
-    tipo_obstaculo_id BIGINT REFERENCES tipo_obstaculo(id),
-    fecha_hora       TIMESTAMP NOT NULL DEFAULT NOW()
+    mode             VARCHAR(20) NOT NULL CHECK (mode IN ('PASSIVE', 'ACTIVE')),
+    distance_cm      DOUBLE PRECISION,
+    image_url        TEXT,
+    ai_labels        TEXT,
+    obstacle_type_id BIGINT REFERENCES obstacle_types(id),
+    created_at       TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- Índice para consultas por fecha (el frontend muestra recientes primero)
-CREATE INDEX IF NOT EXISTS idx_registro_eventos_fecha ON registro_eventos(fecha_hora DESC);
-CREATE INDEX IF NOT EXISTS idx_registro_eventos_modo  ON registro_eventos(modo);
+CREATE INDEX IF NOT EXISTS idx_event_records_created_at ON event_records(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_event_records_mode       ON event_records(mode);

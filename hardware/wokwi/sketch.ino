@@ -5,19 +5,19 @@
  *   El loop() nunca se detiene por WiFi ni por HTTP.
  *   La seguridad local (vibrador) siempre responde aunque no haya Internet.
  *
- *   tareaSeguridad (Core 0, FreeRTOS)  → sensor + vibrador + cola. SIN red.
+ *   safetyTask (Core 0, FreeRTOS)  → sensor + vibrador + cola. SIN red.
  *   loop()         (Core 1)            → WiFi + HTTP con backoff.
  *
  * FILTRADO DE LECTURAS (HC-SR04):
  *   - Lectura válida  : 0 < distancia <= 400 cm.
  *   - Lectura inválida: distancia <= 0, sin eco (timeout) o > 400 cm.
  *     Una lectura inválida aislada se IGNORA (no cambia el estado de alerta).
- *     Si hay LECTURAS_INVALIDAS_PARA_LIBRE seguidas se interpreta como
+ *     Si hay INVALID_READINGS_FOR_CLEAR seguidas se interpreta como
  *     "sin eco = camino libre" y se apaga el vibrador.
  *
- * HISTÉRESIS Y COOLDOWN (alineado con simulador alertas.ts y EstadoPasivo.java):
- *   - Entra en PELIGRO  cuando distancia <= PELIGRO_CM (100 cm) → vibra al instante.
- *   - Sale  de PELIGRO  cuando distancia >  PELIGRO_CM + HISTERESIS_CM (115 cm).
+ * HISTÉRESIS Y COOLDOWN (alineado con simulador alertas.ts y PassiveState.java):
+ *   - Entra en PELIGRO  cuando distancia <= DANGER_CM (100 cm) → vibra al instante.
+ *   - Sale  de PELIGRO  cuando distancia >  DANGER_CM + HYSTERESIS_CM (115 cm).
  *   - Se reporta UN evento por episodio de peligro y nunca antes de COOLDOWN_MS.
  *     Si el episodio empieza dentro del cooldown, el reporte queda pendiente y
  *     se envía en cuanto termina el cooldown (si el obstáculo sigue ahí).
@@ -25,7 +25,7 @@
  * HTTP ROBUSTO:
  *   - El evento NO se descarta hasta confirmar la respuesta.
  *   - Fallo transitorio (sin red, 5xx, timeout, 408, 429): backoff exponencial
- *     BACKOFF_INICIAL_MS → BACKOFF_MAX_MS. No se martillea el backend.
+ *     BACKOFF_INITIAL_MS → BACKOFF_MAX_MS. No se martillea el backend.
  *   - Error de cliente (400, 401, 403, 404...): se DESCARTA el evento (reintentar
  *     no lo arreglaría) y se avisa por Serial para revisar token/payload.
  *
@@ -79,8 +79,8 @@ namespace Cfg {
   // Ejemplo ngrok:   "https://abc123.ngrok-free.app"
   // Ejemplo Railway: "https://orbisbackend-production.up.railway.app"
   // Mientras no empiece por "http" el firmware NO intenta enviar (solo alerta local).
-  const char* BACKEND_URL  = "REEMPLAZAR_CON_URL_DEL_BACKEND";
-  const char* ENDPOINT     = "/api/v1/eventos";
+  const char* BACKEND_URL  = "REPLACE_WITH_BACKEND_URL";
+  const char* ENDPOINT     = "/api/v1/events";
 
   // Token de dispositivo LEGADO compartido. Debe coincidir con APP_DEVICE_TOKEN en Railway.
   // Viene de secrets.h (no versionado). En hardware físico: leer de NVS.
@@ -92,25 +92,25 @@ namespace Cfg {
 //  PINES  (idénticos a diagram.json)
 // ══════════════════════════════════════════════════════════════════
 namespace Pin {
-  const int TRIGGER      = 5;   // esp32:D5  → ultrasonico:TRIG
-  const int ECHO         = 18;  // esp32:D18 → ultrasonico:ECHO
-  const int BOTON        = 4;   // esp32:D4  → boton:1.l (INPUT_PULLUP, 2.l a GND)
-  const int VIBRADOR     = 2;   // esp32:D2  → ledVibrador:A (LED rojo simula el motor)
-  const int LED_ESTADO   = 13;  // esp32:D13 → ledEstado:A   (LED azul: WiFi conectado)
+  const int TRIGGER      = 5;   // esp32:D5  → ultrasonic:TRIG
+  const int ECHO         = 18;  // esp32:D18 → ultrasonic:ECHO
+  const int BUTTON        = 4;   // esp32:D4  → button:1.l (INPUT_PULLUP, 2.l a GND)
+  const int VIBRATOR     = 2;   // esp32:D2  → vibratorLed:A (LED rojo simula el motor)
+  const int STATUS_LED   = 13;  // esp32:D13 → statusLed:A   (LED azul: WiFi conectado)
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  UMBRALES Y TIEMPOS (centralizado; documentado en cm y ms)
 // ══════════════════════════════════════════════════════════════════
-namespace Umbral {
-  const float PELIGRO_CM     = 100.0f; // Peligro si distancia <= 100 cm
-  const float HISTERESIS_CM  =  15.0f; // Seguro solo si distancia > 115 cm
-  const float MAX_VALIDA_CM  = 400.0f; // Lecturas > 400 cm son inválidas
-  const float MIN_EXCLUSIVO_CM = 0.0f; // Lecturas <= 0 cm son inválidas
-  const int   LECTURAS_INVALIDAS_PARA_LIBRE = 3; // 3 inválidas seguidas = sin eco = libre
+namespace Threshold {
+  const float DANGER_CM     = 100.0f; // Peligro si distancia <= 100 cm
+  const float HYSTERESIS_CM  =  15.0f; // Seguro solo si distancia > 115 cm
+  const float MAX_VALID_CM  = 400.0f; // Lecturas > 400 cm son inválidas
+  const float MIN_EXCLUSIVE_CM = 0.0f; // Lecturas <= 0 cm son inválidas
+  const int   INVALID_READINGS_FOR_CLEAR = 3; // 3 inválidas seguidas = sin eco = libre
 }
 
-namespace Tiempo {
+namespace Timing {
   const unsigned long TICK_SENSOR_MS     =  150;  // Frecuencia de lectura del sensor
   const unsigned long TICK_WIFI_MS       = 5000;  // Frecuencia de verificación WiFi
   const unsigned long TICK_HTTP_MS       =  500;  // Frecuencia de revisión de la cola HTTP
@@ -118,7 +118,7 @@ namespace Tiempo {
   const unsigned long WIFI_TIMEOUT_MS    = 8000;  // Timeout de intento de conexión WiFi
   const unsigned long HTTP_TIMEOUT_MS    = 4000;  // Timeout de la petición HTTP
   const unsigned long DEBOUNCE_BTN_MS    = 2000;  // Debounce del botón físico
-  const unsigned long BACKOFF_INICIAL_MS = 2000;  // Primer reintento HTTP tras fallo transitorio
+  const unsigned long BACKOFF_INITIAL_MS = 2000;  // Primer reintento HTTP tras fallo transitorio
   const unsigned long BACKOFF_MAX_MS     = 30000; // Tope del backoff exponencial
 }
 
@@ -126,40 +126,40 @@ namespace Tiempo {
 //  ESTADO INTERNO (volatile para acceso desde ISR/FreeRTOS)
 // ══════════════════════════════════════════════════════════════════
 
-// Evento pendiente de envío (lo escribe tareaSeguridad, lo consume loop)
-struct EventoPendiente {
-  volatile bool   hay;
-  char            modo[8];
-  float           distanciaCm;
+// Evento pendiente de envío (lo escribe safetyTask, lo consume loop)
+struct PendingEvent {
+  volatile bool   pending;
+  char            mode[8];
+  float           distanceCm;
 };
 
-static EventoPendiente eventoEnCola  = { false, "PASIVO", 0.0f };
-static portMUX_TYPE    colaMux       = portMUX_INITIALIZER_UNLOCKED;
+static PendingEvent queuedEvent  = { false, "PASSIVE", 0.0f };
+static portMUX_TYPE    queueMux       = portMUX_INITIALIZER_UNLOCKED;
 
-// Estado de seguridad (solo lo toca tareaSeguridad, Core 0)
-static bool          obstaculoActivo      = false;
-static bool          reportePendiente     = false;  // episodio sin reportar (por cooldown)
-static bool          huboEvento           = false;
-static float         ultimaDistanciaValida = -1.0f;
-static unsigned long ultimoEvento_ms      = 0;
-static unsigned long ultimoBoton_ms       = 0;
+// Estado de seguridad (solo lo toca safetyTask, Core 0)
+static bool          obstacleActive      = false;
+static bool          reportPending     = false;  // episodio sin reportar (por cooldown)
+static bool          hadEvent           = false;
+static float         lastValidDistance = -1.0f;
+static unsigned long lastEvent_ms      = 0;
+static unsigned long lastButton_ms       = 0;
 
 // Estado de red (solo lo toca loop, Core 1)
-static unsigned long proximoIntentoHttp_ms = 0;
-static unsigned long backoffActual_ms      = Tiempo::BACKOFF_INICIAL_MS;
+static unsigned long nextHttpAttempt_ms = 0;
+static unsigned long currentBackoff_ms      = Timing::BACKOFF_INITIAL_MS;
 
 // ══════════════════════════════════════════════════════════════════
 //  PROTOTIPOS
 // ══════════════════════════════════════════════════════════════════
-float   medirDistanciaCm();
-bool    lecturaValida(float distanciaCm);
-void    actualizarVibrador(bool activar);
-void    liberarObstaculo();
-void    encolarEvento(const char* modo, float distancia);
-int     enviarEventoHTTP(const char* modo, float distancia);
-bool    backendConfigurado();
-void    intentarConexionWiFi();
-void    tareaSeguridad(void* param);
+float   measureDistanceCm();
+bool    isValidReading(float distanceCm);
+void    updateVibrator(bool activate);
+void    releaseObstacle();
+void    enqueueEvent(const char* mode, float distance);
+int     sendEventHTTP(const char* mode, float distance);
+bool    backendConfigured();
+void    tryWiFiConnection();
+void    safetyTask(void* param);
 
 // ══════════════════════════════════════════════════════════════════
 //  SETUP
@@ -170,23 +170,23 @@ void setup() {
 
   pinMode(Pin::TRIGGER,    OUTPUT);
   pinMode(Pin::ECHO,       INPUT);
-  pinMode(Pin::BOTON,      INPUT_PULLUP);
-  pinMode(Pin::VIBRADOR,   OUTPUT);
-  pinMode(Pin::LED_ESTADO, OUTPUT);
+  pinMode(Pin::BUTTON,      INPUT_PULLUP);
+  pinMode(Pin::VIBRATOR,   OUTPUT);
+  pinMode(Pin::STATUS_LED, OUTPUT);
 
-  digitalWrite(Pin::VIBRADOR,   LOW);
-  digitalWrite(Pin::LED_ESTADO, LOW);
+  digitalWrite(Pin::VIBRATOR,   LOW);
+  digitalWrite(Pin::STATUS_LED, LOW);
 
   Serial.println(F("\n[SmartCane] Iniciando (arquitectura no-bloqueante)..."));
-  if (!backendConfigurado()) {
+  if (!backendConfigured()) {
     Serial.println(F("[CFG] BACKEND_URL sin configurar: solo alerta local, no se enviarán eventos."));
   }
 
   // Tarea FreeRTOS en Core 0: solo seguridad local (sensor + vibrador)
   // No se detiene aunque Core 1 esté esperando WiFi o HTTP.
   xTaskCreatePinnedToCore(
-    tareaSeguridad,
-    "Seguridad",
+    safetyTask,
+    "Safety",
     4096,         // Stack en bytes
     nullptr,
     2,            // Prioridad alta (mayor que loop)
@@ -195,70 +195,70 @@ void setup() {
   );
 
   // Conexión WiFi inicial (con timeout; la seguridad local ya está corriendo)
-  intentarConexionWiFi();
+  tryWiFiConnection();
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  LOOP PRINCIPAL (Core 1) — solo red, sin bloquear seguridad
 // ══════════════════════════════════════════════════════════════════
 void loop() {
-  unsigned long ahora = millis();
-  static unsigned long ultimoWifi = 0;
-  static unsigned long ultimoHttp = 0;
+  unsigned long now = millis();
+  static unsigned long lastWifi = 0;
+  static unsigned long lastHttp = 0;
 
   // ── Verificación periódica de WiFi ──
-  if (ahora - ultimoWifi >= Tiempo::TICK_WIFI_MS) {
-    ultimoWifi = ahora;
+  if (now - lastWifi >= Timing::TICK_WIFI_MS) {
+    lastWifi = now;
     if (WiFi.status() != WL_CONNECTED) {
-      digitalWrite(Pin::LED_ESTADO, LOW);
+      digitalWrite(Pin::STATUS_LED, LOW);
       Serial.println(F("[WiFi] Desconectado. Reintentando..."));
-      intentarConexionWiFi();
+      tryWiFiConnection();
     }
   }
 
   // ── Envío HTTP: solo si hay URL, WiFi y no estamos en backoff ──
-  if (ahora - ultimoHttp >= Tiempo::TICK_HTTP_MS) {
-    ultimoHttp = ahora;
+  if (now - lastHttp >= Timing::TICK_HTTP_MS) {
+    lastHttp = now;
 
-    bool puedeIntentar = backendConfigurado() &&
+    bool canAttempt = backendConfigured() &&
                          WiFi.status() == WL_CONNECTED &&
-                         (long)(ahora - proximoIntentoHttp_ms) >= 0;
+                         (long)(now - nextHttpAttempt_ms) >= 0;
 
-    if (puedeIntentar) {
-      bool  hayEvento;
-      char  modoLocal[8];
-      float distLocal = 0.0f;
+    if (canAttempt) {
+      bool  hasEvent;
+      char  localMode[8];
+      float localDist = 0.0f;
 
       // Copia atómica: el evento permanece en la cola hasta confirmar la respuesta.
-      // (encolarEvento no sobrescribe mientras hay=true, así que el hueco es nuestro.)
-      portENTER_CRITICAL(&colaMux);
-      hayEvento = eventoEnCola.hay;
-      if (hayEvento) {
-        strncpy(modoLocal, eventoEnCola.modo, sizeof(modoLocal) - 1);
-        modoLocal[sizeof(modoLocal) - 1] = '\0';
-        distLocal = eventoEnCola.distanciaCm;
+      // (enqueueEvent no sobrescribe mientras hay=true, así que el hueco es nuestro.)
+      portENTER_CRITICAL(&queueMux);
+      hasEvent = queuedEvent.pending;
+      if (hasEvent) {
+        strncpy(localMode, queuedEvent.mode, sizeof(localMode) - 1);
+        localMode[sizeof(localMode) - 1] = '\0';
+        localDist = queuedEvent.distanceCm;
       }
-      portEXIT_CRITICAL(&colaMux);
+      portEXIT_CRITICAL(&queueMux);
 
-      if (hayEvento) {
-        int  codigo  = enviarEventoHTTP(modoLocal, distLocal);
-        bool exito   = (codigo >= 200 && codigo < 300);
-        bool errorCliente = (codigo >= 400 && codigo < 500 && codigo != 408 && codigo != 429);
+      if (hasEvent) {
+        int  code  = sendEventHTTP(localMode, localDist);
+        bool success   = (code >= 200 && code < 300);
+        bool clientError = (code >= 400 && code < 500 && code != 408 && code != 429);
 
-        if (exito || errorCliente) {
+        if (success || clientError) {
           // Éxito o rechazo definitivo: liberar la cola y reiniciar el backoff
-          portENTER_CRITICAL(&colaMux);
-          eventoEnCola.hay = false;
-          portEXIT_CRITICAL(&colaMux);
-          backoffActual_ms = Tiempo::BACKOFF_INICIAL_MS;
-          if (errorCliente) {
-            Serial.printf("[HTTP] Evento descartado (error de cliente %d). Revisar token/payload.\n", codigo);
+          portENTER_CRITICAL(&queueMux);
+          queuedEvent.pending = false;
+          portEXIT_CRITICAL(&queueMux);
+          currentBackoff_ms = Timing::BACKOFF_INITIAL_MS;
+          if (clientError) {
+            Serial.printf("[HTTP] Evento descartado (error de cliente %d). Revisar token/payload.\n", code);
           }
         } else {
           // Fallo transitorio: conservar el evento y esperar con backoff exponencial
-          proximoIntentoHttp_ms = millis() + backoffActual_ms;
-          Serial.printf("[HTTP] Fallo transitorio. Reintento en %lu ms\n", backoffActual_ms);
-          backoffActual_ms = min(backoffActual_ms * 2UL, Tiempo::BACKOFF_MAX_MS);
+          nextHttpAttempt_ms = millis() + currentBackoff_ms;
+          Serial.printf("[HTTP] Fallo transitorio. Reintento en %lu ms\n", currentBackoff_ms);
+          currentBackoff_ms = min(currentBackoff_ms * 2UL, Timing::BACKOFF_MAX_MS);
         }
       }
     }
@@ -269,60 +269,60 @@ void loop() {
 //  TAREA FREERTOS — SEGURIDAD LOCAL (Core 0)
 //  NUNCA usa WiFi ni HTTP. Responde siempre.
 // ══════════════════════════════════════════════════════════════════
-void tareaSeguridad(void* param) {
-  unsigned long ultimoTick = 0;
-  int invalidasSeguidas = 0;
+void safetyTask(void* param) {
+  unsigned long lastTick = 0;
+  int consecutiveInvalid = 0;
 
   for (;;) {
-    unsigned long ahora = millis();
+    unsigned long now = millis();
 
-    if (ahora - ultimoTick >= Tiempo::TICK_SENSOR_MS) {
-      ultimoTick = ahora;
+    if (now - lastTick >= Timing::TICK_SENSOR_MS) {
+      lastTick = now;
 
-      float distancia = medirDistanciaCm();
+      float distance = measureDistanceCm();
 
-      if (lecturaValida(distancia)) {
-        invalidasSeguidas = 0;
-        ultimaDistanciaValida = distancia;
+      if (isValidReading(distance)) {
+        consecutiveInvalid = 0;
+        lastValidDistance = distance;
 
         // ── Histéresis: entrar ≤ 100 cm, salir > 115 cm ──
-        if (distancia <= Umbral::PELIGRO_CM) {
-          if (!obstaculoActivo) {
-            obstaculoActivo  = true;
-            reportePendiente = true;
-            actualizarVibrador(true);   // Alerta local INMEDIATA, sin red
-            Serial.printf("[SEGURIDAD] Obstaculo: %.1f cm\n", distancia);
+        if (distance <= Threshold::DANGER_CM) {
+          if (!obstacleActive) {
+            obstacleActive  = true;
+            reportPending = true;
+            updateVibrator(true);   // Alerta local INMEDIATA, sin red
+            Serial.printf("[SEGURIDAD] Obstaculo: %.1f cm\n", distance);
           }
-        } else if (obstaculoActivo &&
-                   distancia > (Umbral::PELIGRO_CM + Umbral::HISTERESIS_CM)) {
-          liberarObstaculo();
+        } else if (obstacleActive &&
+                   distance > (Threshold::DANGER_CM + Threshold::HYSTERESIS_CM)) {
+          releaseObstacle();
         }
       } else {
         // Lectura inválida (<= 0, sin eco o > 400 cm): se ignora.
         // Varias seguidas = sin eco = camino libre.
-        if (++invalidasSeguidas >= Umbral::LECTURAS_INVALIDAS_PARA_LIBRE && obstaculoActivo) {
-          liberarObstaculo();
+        if (++consecutiveInvalid >= Threshold::INVALID_READINGS_FOR_CLEAR && obstacleActive) {
+          releaseObstacle();
         }
       }
 
       // ── Reporte con cooldown: 1 evento por episodio, nunca antes de COOLDOWN_MS ──
-      if (obstaculoActivo && reportePendiente &&
-          (!huboEvento || ahora - ultimoEvento_ms >= Tiempo::COOLDOWN_MS)) {
-        ultimoEvento_ms  = ahora;
-        huboEvento       = true;
-        reportePendiente = false;
-        encolarEvento("PASIVO", ultimaDistanciaValida);
+      if (obstacleActive && reportPending &&
+          (!hadEvent || now - lastEvent_ms >= Timing::COOLDOWN_MS)) {
+        lastEvent_ms  = now;
+        hadEvent       = true;
+        reportPending = false;
+        enqueueEvent("PASSIVE", lastValidDistance);
       }
 
       // ── Modo Activo: botón ──
-      if (digitalRead(Pin::BOTON) == LOW) {
-        if (ahora - ultimoBoton_ms >= Tiempo::DEBOUNCE_BTN_MS) {
-          ultimoBoton_ms = ahora;
-          if (ultimaDistanciaValida > 0.0f) {
-            Serial.printf("[ACTIVO] Boton. Distancia: %.1f cm\n", ultimaDistanciaValida);
-            encolarEvento("ACTIVO", ultimaDistanciaValida);
+      if (digitalRead(Pin::BUTTON) == LOW) {
+        if (now - lastButton_ms >= Timing::DEBOUNCE_BTN_MS) {
+          lastButton_ms = now;
+          if (lastValidDistance > 0.0f) {
+            Serial.printf("[ACTIVE] Boton. Distancia: %.1f cm\n", lastValidDistance);
+            enqueueEvent("ACTIVE", lastValidDistance);
           } else {
-            Serial.println(F("[ACTIVO] Boton ignorado: aun no hay lectura valida del sensor"));
+            Serial.println(F("[ACTIVE] Boton ignorado: aun no hay lectura valida del sensor"));
           }
         }
       }
@@ -337,49 +337,49 @@ void tareaSeguridad(void* param) {
 // ══════════════════════════════════════════════════════════════════
 
 /** Devuelve la distancia en cm, o -1 si no hubo eco (timeout). */
-float medirDistanciaCm() {
+float measureDistanceCm() {
   digitalWrite(Pin::TRIGGER, LOW);
   delayMicroseconds(2);
   digitalWrite(Pin::TRIGGER, HIGH);
   delayMicroseconds(10);
   digitalWrite(Pin::TRIGGER, LOW);
 
-  long duracion = pulseIn(Pin::ECHO, HIGH, 25000); // Timeout 25 ms (≈ 425 cm)
-  if (duracion == 0) return -1.0f;                 // Sin eco → lectura inválida
-  return duracion * 0.034f / 2.0f;
+  long duration = pulseIn(Pin::ECHO, HIGH, 25000); // Timeout 25 ms (≈ 425 cm)
+  if (duration == 0) return -1.0f;                 // Sin eco → lectura inválida
+  return duration * 0.034f / 2.0f;
 }
 
 /** Válida si 0 < distancia <= 400 cm. */
-bool lecturaValida(float distanciaCm) {
-  return distanciaCm > Umbral::MIN_EXCLUSIVO_CM && distanciaCm <= Umbral::MAX_VALIDA_CM;
+bool isValidReading(float distanceCm) {
+  return distanceCm > Threshold::MIN_EXCLUSIVE_CM && distanceCm <= Threshold::MAX_VALID_CM;
 }
 
-void actualizarVibrador(bool activar) {
-  digitalWrite(Pin::VIBRADOR, activar ? HIGH : LOW);
+void updateVibrator(bool activate) {
+  digitalWrite(Pin::VIBRATOR, activate ? HIGH : LOW);
 }
 
-void liberarObstaculo() {
-  obstaculoActivo  = false;
-  reportePendiente = false;
-  actualizarVibrador(false);
+void releaseObstacle() {
+  obstacleActive  = false;
+  reportPending = false;
+  updateVibrator(false);
   Serial.println(F("[SEGURIDAD] Camino libre"));
 }
 
-/** Encola un evento para envío HTTP posterior (llamado desde tareaSeguridad). */
-void encolarEvento(const char* modo, float distancia) {
-  portENTER_CRITICAL(&colaMux);
+/** Encola un evento para envío HTTP posterior (llamado desde safetyTask). */
+void enqueueEvent(const char* mode, float distance) {
+  portENTER_CRITICAL(&queueMux);
   // Solo encolar si no hay uno pendiente (evitar sobreescribir; el anterior tiene prioridad)
-  if (!eventoEnCola.hay) {
-    eventoEnCola.hay = true;
-    strncpy(eventoEnCola.modo, modo, sizeof(eventoEnCola.modo) - 1);
-    eventoEnCola.modo[sizeof(eventoEnCola.modo) - 1] = '\0';
-    eventoEnCola.distanciaCm = distancia;
+  if (!queuedEvent.pending) {
+    queuedEvent.pending = true;
+    strncpy(queuedEvent.mode, mode, sizeof(queuedEvent.mode) - 1);
+    queuedEvent.mode[sizeof(queuedEvent.mode) - 1] = '\0';
+    queuedEvent.distanceCm = distance;
   }
-  portEXIT_CRITICAL(&colaMux);
+  portEXIT_CRITICAL(&queueMux);
 }
 
 /** True si BACKEND_URL ya fue reemplazada por una URL real. */
-bool backendConfigurado() {
+bool backendConfigured() {
   return strncmp(Cfg::BACKEND_URL, "http", 4) == 0;
 }
 
@@ -387,19 +387,19 @@ bool backendConfigurado() {
  * Envía el evento al backend.
  * Devuelve el código HTTP (200-299 éxito) o un valor <= 0 si falló la conexión.
  */
-int enviarEventoHTTP(const char* modo, float distancia) {
+int sendEventHTTP(const char* mode, float distance) {
   String url = String(Cfg::BACKEND_URL) + String(Cfg::ENDPOINT);
 
-  // Construir JSON (sin imagenUrl: el ESP32-Maestro no envía imágenes)
+  // Construir JSON (sin imageUrl: el ESP32-Maestro no envía imágenes)
   StaticJsonDocument<256> doc;
-  doc["modo"]        = modo;
-  doc["distanciaCm"] = distancia;
-  // etiquetasIA omitida: el backend asigna null en modo PASIVO
+  doc["mode"]        = mode;
+  doc["distanceCm"] = distance;
+  // aiLabels omitida: el backend asigna null en modo PASSIVE
   String jsonBody;
   serializeJson(doc, jsonBody);
 
   HTTPClient http;
-  http.setTimeout(Tiempo::HTTP_TIMEOUT_MS);
+  http.setTimeout(Timing::HTTP_TIMEOUT_MS);
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept",       "application/json");
@@ -411,31 +411,31 @@ int enviarEventoHTTP(const char* modo, float distancia) {
   // individual. Hasta entonces, el token va en secrets.h (no versionado), nunca en el repo.
   http.addHeader("X-Device-Token", Cfg::DEVICE_TOKEN);
 
-  Serial.printf("[HTTP] POST %s modo=%s dist=%.1f\n", url.c_str(), modo, distancia);
-  int codigo = http.POST(jsonBody);
+  Serial.printf("[HTTP] POST %s modo=%s dist=%.1f\n", url.c_str(), mode, distance);
+  int code = http.POST(jsonBody);
 
-  if (codigo >= 200 && codigo < 300) {
-    Serial.printf("[HTTP] OK %d\n", codigo);
-  } else if (codigo > 0) {
-    Serial.printf("[HTTP] Error servidor/cliente %d\n", codigo);
+  if (code >= 200 && code < 300) {
+    Serial.printf("[HTTP] OK %d\n", code);
+  } else if (code > 0) {
+    Serial.printf("[HTTP] Error servidor/cliente %d\n", code);
   } else {
-    Serial.printf("[HTTP] Error conexion: %s\n", http.errorToString(codigo).c_str());
+    Serial.printf("[HTTP] Error conexion: %s\n", http.errorToString(code).c_str());
   }
 
   http.end();
-  return codigo;
+  return code;
 }
 
 /** Intento de conexión WiFi con timeout. No bloquea más de WIFI_TIMEOUT_MS. */
-void intentarConexionWiFi() {
+void tryWiFiConnection() {
   if (WiFi.status() == WL_CONNECTED) return;
 
   Serial.printf("[WiFi] Conectando a %s...\n", Cfg::SSID);
   WiFi.begin(Cfg::SSID, Cfg::PASSWORD);
 
-  unsigned long inicio = millis();
+  unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED &&
-         millis() - inicio < Tiempo::WIFI_TIMEOUT_MS) {
+         millis() - start < Timing::WIFI_TIMEOUT_MS) {
     delay(200);
     Serial.print('.');
   }
@@ -443,9 +443,9 @@ void intentarConexionWiFi() {
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.printf("[WiFi] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
-    digitalWrite(Pin::LED_ESTADO, HIGH);
+    digitalWrite(Pin::STATUS_LED, HIGH);
   } else {
     Serial.println(F("[WiFi] Sin conexion. El baston sigue funcionando localmente."));
-    digitalWrite(Pin::LED_ESTADO, LOW);
+    digitalWrite(Pin::STATUS_LED, LOW);
   }
 }

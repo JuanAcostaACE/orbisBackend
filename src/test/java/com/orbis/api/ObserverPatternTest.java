@@ -1,13 +1,13 @@
 package com.orbis.api;
 
-import com.orbis.api.command.EjecutorComando;
+import com.orbis.api.command.CommandExecutor;
 import com.orbis.api.facade.VisionAdapter;
-import com.orbis.api.model.RegistroEvento;
-import com.orbis.api.observer.EventoRegistradoEvent;
-import com.orbis.api.observer.LogEventoObserver;
-import com.orbis.api.repository.RegistroEventoRepository;
-import com.orbis.api.strategy.ActivoStrategy;
-import com.orbis.api.strategy.PasivoStrategy;
+import com.orbis.api.model.EventRecord;
+import com.orbis.api.observer.EventRecordedEvent;
+import com.orbis.api.observer.LogEventObserver;
+import com.orbis.api.repository.EventRecordRepository;
+import com.orbis.api.strategy.ActiveStrategy;
+import com.orbis.api.strategy.PassiveStrategy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,27 +37,27 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class ObserverPatternTest {
 
-    @Mock RegistroEventoRepository repository;
+    @Mock EventRecordRepository repository;
 
-    private GenericApplicationContext contexto;
-    private final List<EventoRegistradoEvent> recibidosA = new ArrayList<>();
-    private final List<EventoRegistradoEvent> recibidosB = new ArrayList<>();
-    private final EjecutorComando ejecutor = new EjecutorComando();
+    private GenericApplicationContext context;
+    private final List<EventRecordedEvent> receivedA = new ArrayList<>();
+    private final List<EventRecordedEvent> receivedB = new ArrayList<>();
+    private final CommandExecutor executor = new CommandExecutor();
 
     @BeforeEach
     void setUp() {
-        contexto = new GenericApplicationContext();
-        contexto.addApplicationListener((ApplicationListener<ApplicationEvent>) ev -> {
-            if (ev instanceof EventoRegistradoEvent e) recibidosA.add(e);
+        context = new GenericApplicationContext();
+        context.addApplicationListener((ApplicationListener<ApplicationEvent>) ev -> {
+            if (ev instanceof EventRecordedEvent e) receivedA.add(e);
         });
-        contexto.addApplicationListener((ApplicationListener<ApplicationEvent>) ev -> {
-            if (ev instanceof EventoRegistradoEvent e) recibidosB.add(e);
+        context.addApplicationListener((ApplicationListener<ApplicationEvent>) ev -> {
+            if (ev instanceof EventRecordedEvent e) receivedB.add(e);
         });
-        contexto.refresh();
+        context.refresh();
 
         // save() asigna un id, como haría la base de datos
-        lenient().when(repository.save(any(RegistroEvento.class))).thenAnswer(inv -> {
-            RegistroEvento e = inv.getArgument(0);
+        lenient().when(repository.save(any(EventRecord.class))).thenAnswer(inv -> {
+            EventRecord e = inv.getArgument(0);
             e.setId(99L);
             return e;
         });
@@ -65,100 +65,100 @@ class ObserverPatternTest {
 
     @AfterEach
     void tearDown() {
-        contexto.close();
+        context.close();
     }
 
-    private static RegistroEvento evento(String modo) {
-        RegistroEvento e = new RegistroEvento();
-        e.setModo(modo);
-        e.setDistanciaCm(25.0);
+    private static EventRecord event(String mode) {
+        EventRecord e = new EventRecord();
+        e.setMode(mode);
+        e.setDistanceCm(25.0);
         return e;
     }
 
     @Test
-    @DisplayName("Guardar un evento PASIVO emite EventoRegistradoEvent con la entidad guardada")
-    void pasivo_emite_evento_registrado() {
-        PasivoStrategy strategy = new PasivoStrategy(repository, ejecutor, contexto);
+    @DisplayName("Guardar un evento PASSIVE emite EventRecordedEvent con la entidad guardada")
+    void passive_emits_recorded_event() {
+        PassiveStrategy strategy = new PassiveStrategy(repository, executor, context);
 
-        strategy.procesar(evento("PASIVO"));
+        strategy.process(event("PASSIVE"));
 
-        assertThat(recibidosA).hasSize(1);
-        assertThat(recibidosA.get(0).getEvento().getId()).isEqualTo(99L);
-        assertThat(recibidosA.get(0).getEvento().getModo()).isEqualTo("PASIVO");
+        assertThat(receivedA).hasSize(1);
+        assertThat(receivedA.get(0).getEvent().getId()).isEqualTo(99L);
+        assertThat(receivedA.get(0).getEvent().getMode()).isEqualTo("PASSIVE");
     }
 
     @Test
-    @DisplayName("Guardar un evento ACTIVO emite EventoRegistradoEvent")
-    void activo_emite_evento_registrado() {
-        ActivoStrategy strategy = new ActivoStrategy(repository, new VisionAdapter(), ejecutor, contexto);
-        RegistroEvento e = evento("ACTIVO");
-        e.setEtiquetasIA("chair (80%)");
+    @DisplayName("Guardar un evento ACTIVE emite EventRecordedEvent")
+    void active_emits_recorded_event() {
+        ActiveStrategy strategy = new ActiveStrategy(repository, new VisionAdapter(), executor, context);
+        EventRecord e = event("ACTIVE");
+        e.setAiLabels("chair (80%)");
 
-        strategy.procesar(e);
+        strategy.process(e);
 
-        assertThat(recibidosA).hasSize(1);
-        assertThat(recibidosA.get(0).getEvento().getEtiquetasIA()).isEqualTo("Chair (80%)");
+        assertThat(receivedA).hasSize(1);
+        assertThat(receivedA.get(0).getEvent().getAiLabels()).isEqualTo("Chair (80%)");
     }
 
     @Test
     @DisplayName("Todos los observers suscritos reciben el mismo evento")
-    void varios_observers_reciben_el_evento() {
-        new PasivoStrategy(repository, ejecutor, contexto).procesar(evento("PASIVO"));
+    void multiple_observers_receive_event() {
+        new PassiveStrategy(repository, executor, context).process(event("PASSIVE"));
 
-        assertThat(recibidosA).hasSize(1);
-        assertThat(recibidosB).hasSize(1);
-        assertThat(recibidosA.get(0)).isSameAs(recibidosB.get(0));
+        assertThat(receivedA).hasSize(1);
+        assertThat(receivedB).hasSize(1);
+        assertThat(receivedA.get(0)).isSameAs(receivedB.get(0));
     }
 
     @Test
-    @DisplayName("LogEventoObserver recibe el evento publicado y delega en onEventoRegistrado")
-    void log_observer_recibe_evento() {
-        LogEventoObserver observer = spy(new LogEventoObserver());
-        contexto.close();
-        contexto = new GenericApplicationContext();
-        contexto.addApplicationListener(observer);
-        contexto.refresh();
+    @DisplayName("LogEventObserver recibe el evento publicado y delega en onEventRecorded")
+    void log_observer_receives_event() {
+        LogEventObserver observer = spy(new LogEventObserver());
+        context.close();
+        context = new GenericApplicationContext();
+        context.addApplicationListener(observer);
+        context.refresh();
 
-        new PasivoStrategy(repository, ejecutor, contexto).procesar(evento("PASIVO"));
+        new PassiveStrategy(repository, executor, context).process(event("PASSIVE"));
 
-        verify(observer).onEventoRegistrado(any(EventoRegistradoEvent.class));
+        verify(observer).onEventRecorded(any(EventRecordedEvent.class));
     }
 
     @Test
-    @DisplayName("PASIVO: si falla la persistencia NO se emite el evento")
-    void pasivo_no_emite_si_falla_persistencia() {
-        lenient().when(repository.save(any(RegistroEvento.class))).thenThrow(new RuntimeException("db caída"));
-        PasivoStrategy strategy = new PasivoStrategy(repository, ejecutor, contexto);
+    @DisplayName("PASSIVE: si falla la persistencia NO se emite el evento")
+    void passive_does_not_emit_if_persistence_fails() {
+        lenient().when(repository.save(any(EventRecord.class))).thenThrow(new RuntimeException("db caída"));
+        PassiveStrategy strategy = new PassiveStrategy(repository, executor, context);
 
-        assertThatThrownBy(() -> strategy.procesar(evento("PASIVO")))
+        assertThatThrownBy(() -> strategy.process(event("PASSIVE")))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("db caída");
 
-        assertThat(recibidosA).isEmpty();
-        assertThat(recibidosB).isEmpty();
+        assertThat(receivedA).isEmpty();
+        assertThat(receivedB).isEmpty();
     }
 
     @Test
-    @DisplayName("ACTIVO: si falla la persistencia NO se emite el evento")
-    void activo_no_emite_si_falla_persistencia() {
-        lenient().when(repository.save(any(RegistroEvento.class))).thenThrow(new RuntimeException("db caída"));
-        ActivoStrategy strategy = new ActivoStrategy(repository, new VisionAdapter(), ejecutor, contexto);
+    @DisplayName("ACTIVE: si falla la persistencia NO se emite el evento")
+    void active_does_not_emit_if_persistence_fails() {
+        lenient().when(repository.save(any(EventRecord.class))).thenThrow(new RuntimeException("db caída"));
+        ActiveStrategy strategy = new ActiveStrategy(repository, new VisionAdapter(), executor, context);
 
-        assertThatThrownBy(() -> strategy.procesar(evento("ACTIVO")))
+        assertThatThrownBy(() -> strategy.process(event("ACTIVE")))
                 .isInstanceOf(RuntimeException.class);
 
-        assertThat(recibidosA).isEmpty();
+        assertThat(receivedA).isEmpty();
     }
 
     @Test
-    @DisplayName("EventoRegistradoEvent expone la entidad y su origen")
-    void evento_expone_entidad_y_origen() {
-        RegistroEvento e = evento("PASIVO");
-        Object origen = new Object();
+    @DisplayName("EventRecordedEvent expone la entidad y su origen")
+    void event_exposes_entity_and_source() {
+        EventRecord e = event("PASSIVE");
+        Object origin = new Object();
 
-        EventoRegistradoEvent ev = new EventoRegistradoEvent(origen, e);
+        EventRecordedEvent ev = new EventRecordedEvent(origin, e);
 
-        assertThat(ev.getEvento()).isSameAs(e);
-        assertThat(ev.getSource()).isSameAs(origen);
+        assertThat(ev.getEvent()).isSameAs(e);
+        assertThat(ev.getSource()).isSameAs(origin);
     }
 }

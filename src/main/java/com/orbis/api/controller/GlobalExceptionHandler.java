@@ -1,7 +1,7 @@
 package com.orbis.api.controller;
 
 import com.orbis.api.facade.VisionException;
-import com.orbis.api.service.CuentaBloqueadaException;
+import com.orbis.api.service.AccountLockedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -32,14 +32,14 @@ public class GlobalExceptionHandler {
 
     /** Cuerpo ausente, vacío o ilegible (p. ej. JSON mal formado) — 400 genérico. */
     @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestPartException.class})
-    public ResponseEntity<Map<String, Object>> handleCuerpoInvalido(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleInvalidBody(Exception ex) {
         return ResponseEntity.badRequest()
                 .body(errorBody(400, "Cuerpo de la petición inválido o vacío"));
     }
 
     /** Parámetro de ruta o consulta con tipo incorrecto — 400 genérico. */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<Map<String, Object>> handleTipoParametro(
+    public ResponseEntity<Map<String, Object>> handleParameterType(
             MethodArgumentTypeMismatchException ex) {
         return ResponseEntity.badRequest()
                 .body(errorBody(400, "Parámetro de petición inválido"));
@@ -49,11 +49,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(
             MethodArgumentNotValidException ex) {
-        String detalle = ex.getBindingResult().getFieldErrors().stream()
+        String detail = ex.getBindingResult().getFieldErrors().stream()
                 .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return ResponseEntity.badRequest()
-                .body(errorBody(400, "Datos de entrada inválidos: " + detalle));
+                .body(errorBody(400, "Datos de entrada inválidos: " + detail));
     }
 
     /** Método HTTP no soportado por la ruta — 405 (antes respondía 500). */
@@ -87,10 +87,10 @@ public class GlobalExceptionHandler {
     }
 
     /** Cuenta bloqueada por demasiados intentos — 429, mismo cuerpo que el limitador por IP. */
-    @ExceptionHandler(CuentaBloqueadaException.class)
-    public ResponseEntity<Map<String, Object>> handleCuentaBloqueada(CuentaBloqueadaException ex) {
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccountLocked(AccountLockedException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .header("Retry-After", String.valueOf(ex.getSegundosRestantes()))
+                .header("Retry-After", String.valueOf(ex.getRemainingSeconds()))
                 .body(errorBody(429, "Demasiados intentos. Intenta de nuevo más tarde"));
     }
 
@@ -125,10 +125,10 @@ public class GlobalExceptionHandler {
                 .body(errorBody(500, "Error interno del servidor"));
     }
 
-    private Map<String, Object> errorBody(int status, String mensaje) {
+    private Map<String, Object> errorBody(int status, String message) {
         return Map.of(
                 "status",    status,
-                "mensaje",   mensaje,
+                "message",   message,
                 "timestamp", LocalDateTime.now().toString()
         );
     }

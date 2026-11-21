@@ -1,13 +1,13 @@
 package com.orbis.api;
 
-import com.orbis.api.command.Comando;
-import com.orbis.api.command.ComandoConsultarIA;
-import com.orbis.api.command.ComandoGuardarEvento;
-import com.orbis.api.command.EjecutorComando;
+import com.orbis.api.command.Command;
+import com.orbis.api.command.QueryAiCommand;
+import com.orbis.api.command.SaveEventCommand;
+import com.orbis.api.command.CommandExecutor;
 import com.orbis.api.facade.VisionException;
 import com.orbis.api.facade.VisionFacade;
-import com.orbis.api.model.RegistroEvento;
-import com.orbis.api.repository.RegistroEventoRepository;
+import com.orbis.api.model.EventRecord;
+import com.orbis.api.repository.EventRecordRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,99 +24,99 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * Patrón COMMAND: EjecutorComando (invoker), ComandoGuardarEvento y ComandoConsultarIA
+ * Patrón COMMAND: CommandExecutor (invoker), SaveEventCommand y QueryAiCommand
  * (comandos concretos) con sus dependencias aisladas por mocks.
  */
 @ExtendWith(MockitoExtension.class)
 class CommandPatternTest {
 
-    @Mock RegistroEventoRepository repository;
+    @Mock EventRecordRepository repository;
     @Mock VisionFacade visionFacade;
 
-    private final EjecutorComando ejecutor = new EjecutorComando();
+    private final CommandExecutor executor = new CommandExecutor();
 
-    // ── EjecutorComando ───────────────────────────────────────────
+    // ── CommandExecutor ───────────────────────────────────────────
 
     @Test
-    @DisplayName("EjecutorComando ejecuta el comando una vez y devuelve su resultado")
-    void ejecutor_ejecuta_y_devuelve_resultado() {
-        AtomicInteger llamadas = new AtomicInteger();
-        Comando<String> comando = () -> { llamadas.incrementAndGet(); return "ok"; };
+    @DisplayName("CommandExecutor ejecuta el comando una vez y devuelve su resultado")
+    void executor_executes_and_returns_result() {
+        AtomicInteger calls = new AtomicInteger();
+        Command<String> command = () -> { calls.incrementAndGet(); return "ok"; };
 
-        String resultado = ejecutor.ejecutar(comando);
+        String outcome = executor.execute(command);
 
-        assertThat(resultado).isEqualTo("ok");
-        assertThat(llamadas.get()).isEqualTo(1);
+        assertThat(outcome).isEqualTo("ok");
+        assertThat(calls.get()).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("EjecutorComando propaga las excepciones del comando")
-    void ejecutor_propaga_excepciones() {
-        Comando<String> comando = () -> { throw new IllegalStateException("falló"); };
+    @DisplayName("CommandExecutor propaga las excepciones del comando")
+    void executor_propagates_exceptions() {
+        Command<String> command = () -> { throw new IllegalStateException("falló"); };
 
-        assertThatThrownBy(() -> ejecutor.ejecutar(comando))
+        assertThatThrownBy(() -> executor.execute(command))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("falló");
     }
 
-    // ── ComandoGuardarEvento ──────────────────────────────────────
+    // ── SaveEventCommand ──────────────────────────────────────
 
     @Test
-    @DisplayName("ComandoGuardarEvento: no toca el repositorio hasta ejecutar() y luego guarda")
-    void guardar_es_diferido_y_persiste() {
-        RegistroEvento entrada = new RegistroEvento();
-        entrada.setModo("PASIVO");
-        RegistroEvento guardado = new RegistroEvento();
-        guardado.setId(7L);
-        when(repository.save(entrada)).thenReturn(guardado);
+    @DisplayName("SaveEventCommand: no toca el repositorio hasta ejecutar() y luego guarda")
+    void save_is_deferred_and_persists() {
+        EventRecord input = new EventRecord();
+        input.setMode("PASSIVE");
+        EventRecord saved = new EventRecord();
+        saved.setId(7L);
+        when(repository.save(input)).thenReturn(saved);
 
-        ComandoGuardarEvento comando = new ComandoGuardarEvento(repository, entrada);
+        SaveEventCommand command = new SaveEventCommand(repository, input);
         verifyNoInteractions(repository);              // construir el comando no ejecuta nada
 
-        RegistroEvento resultado = ejecutor.ejecutar(comando);
+        EventRecord outcome = executor.execute(command);
 
-        verify(repository).save(entrada);
-        assertThat(resultado).isSameAs(guardado);
-        assertThat(resultado.getId()).isEqualTo(7L);
+        verify(repository).save(input);
+        assertThat(outcome).isSameAs(saved);
+        assertThat(outcome.getId()).isEqualTo(7L);
     }
 
     @Test
-    @DisplayName("ComandoGuardarEvento propaga el fallo de persistencia")
-    void guardar_propaga_fallo() {
-        RegistroEvento entrada = new RegistroEvento();
-        when(repository.save(entrada)).thenThrow(new RuntimeException("db caída"));
+    @DisplayName("SaveEventCommand propaga el fallo de persistencia")
+    void save_propagates_failure() {
+        EventRecord input = new EventRecord();
+        when(repository.save(input)).thenThrow(new RuntimeException("db caída"));
 
-        assertThatThrownBy(() -> ejecutor.ejecutar(new ComandoGuardarEvento(repository, entrada)))
+        assertThatThrownBy(() -> executor.execute(new SaveEventCommand(repository, input)))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("db caída");
     }
 
-    // ── ComandoConsultarIA ────────────────────────────────────────
+    // ── QueryAiCommand ────────────────────────────────────────
 
     @Test
-    @DisplayName("ComandoConsultarIA delega en la fachada con el mismo argumento")
-    void consultar_ia_delega_en_fachada() {
-        when(visionFacade.analizarImagen("chair, table")).thenReturn(List.of("Chair", "Table"));
+    @DisplayName("QueryAiCommand delega en la fachada con el mismo argumento")
+    void query_ai_delegates_to_facade() {
+        when(visionFacade.analyzeImage("chair, table")).thenReturn(List.of("Chair", "Table"));
 
-        List<String> resultado = ejecutor.ejecutar(new ComandoConsultarIA(visionFacade, "chair, table"));
+        List<String> outcome = executor.execute(new QueryAiCommand(visionFacade, "chair, table"));
 
-        verify(visionFacade).analizarImagen("chair, table");
-        assertThat(resultado).containsExactly("Chair", "Table");
+        verify(visionFacade).analyzeImage("chair, table");
+        assertThat(outcome).containsExactly("Chair", "Table");
     }
 
     @Test
-    @DisplayName("ComandoConsultarIA no consulta la fachada hasta ejecutar()")
-    void consultar_ia_es_diferido() {
-        new ComandoConsultarIA(visionFacade, "x");
+    @DisplayName("QueryAiCommand no consulta la fachada hasta ejecutar()")
+    void query_ai_is_deferred() {
+        new QueryAiCommand(visionFacade, "x");
         verifyNoInteractions(visionFacade);
     }
 
     @Test
-    @DisplayName("ComandoConsultarIA propaga VisionException a través del ejecutor")
-    void consultar_ia_propaga_vision_exception() {
-        when(visionFacade.analizarImagen("mal")).thenThrow(new VisionException("entrada inválida"));
+    @DisplayName("QueryAiCommand propaga VisionException a través del ejecutor")
+    void query_ai_propagates_vision_exception() {
+        when(visionFacade.analyzeImage("mal")).thenThrow(new VisionException("entrada inválida"));
 
-        assertThatThrownBy(() -> ejecutor.ejecutar(new ComandoConsultarIA(visionFacade, "mal")))
+        assertThatThrownBy(() -> executor.execute(new QueryAiCommand(visionFacade, "mal")))
                 .isInstanceOf(VisionException.class)
                 .hasMessage("entrada inválida");
     }

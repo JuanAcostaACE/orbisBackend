@@ -32,7 +32,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     @DisplayName("JSON mal formado en /auth/login → 400")
-    void json_mal_formado() throws Exception {
+    void malformed_json() throws Exception {
         mvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{no es json"))
@@ -41,25 +41,25 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    @DisplayName("Id no numérico en /api/v1/eventos/{id} → 400")
-    void id_no_numerico() throws Exception {
+    @DisplayName("Id no numérico en /api/v1/events/{id} → 400")
+    void non_numeric_id() throws Exception {
         // La API autentica por sesión (HttpSessionSecurityContextRepository); @WithMockUser
         // no llega al filtro, así que se coloca el contexto en la sesión como haría el login.
         SecurityContext ctx = SecurityContextHolder.createEmptyContext();
         ctx.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
                 "usuario@test.com", null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
-        MockHttpSession sesion = new MockHttpSession();
-        sesion.setAttribute(
+        MockHttpSession userSession = new MockHttpSession();
+        userSession.setAttribute(
                 HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, ctx);
 
-        mvc.perform(get("/api/v1/eventos/abc").session(sesion))
+        mvc.perform(get("/api/v1/events/abc").session(userSession))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
     }
 
     @Test
     @DisplayName("GET sobre /auth/login (solo POST) → 405")
-    void metodo_no_permitido() throws Exception {
+    void method_not_allowed() throws Exception {
         mvc.perform(get("/auth/login"))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.status").value(405));
@@ -67,8 +67,8 @@ class GlobalExceptionHandlerTest {
 
     @Test
     @DisplayName("Ruta pública inexistente → 404 JSON")
-    void ruta_inexistente() throws Exception {
-        mvc.perform(get("/auth/no-existe"))
+    void nonexistent_route() throws Exception {
+        mvc.perform(get("/auth/does-not-exist"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
     }
