@@ -23,7 +23,7 @@ class SecurityHeadersTest {
 
     @Test
     @DisplayName("GET /health incluye nosniff, Referrer-Policy, Permissions-Policy y CSP")
-    void cabeceras_basicas() throws Exception {
+    void basic_headers() throws Exception {
         mvc.perform(get("/health"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"))

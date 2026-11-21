@@ -225,26 +225,26 @@ arranque de la aplicacion. No ejecutar las pruebas del paso 5 contra un desplieg
 Token antiguo (debe devolver `401` o `403`, y no crear evento):
 
 ```
-curl -s -o /dev/null -w "%{http_code}\n" -X POST "$BACKEND_URL/api/v1/eventos" \
+curl -s -o /dev/null -w "%{http_code}\n" -X POST "$BACKEND_URL/api/v1/events" \
   -H "Content-Type: application/json" \
   -H "X-Device-Token: $OLD_TOKEN" \
-  -d '{"modo":"PASIVO","distanciaCm":50}'
+  -d '{"mode":"PASSIVE","distanceCm":50}'
 ```
 
 Token nuevo (debe devolver `201`):
 
 ```
-curl -s -o /dev/null -w "%{http_code}\n" -X POST "$BACKEND_URL/api/v1/eventos" \
+curl -s -o /dev/null -w "%{http_code}\n" -X POST "$BACKEND_URL/api/v1/events" \
   -H "Content-Type: application/json" \
   -H "X-Device-Token: $NEW_TOKEN" \
-  -d '{"modo":"PASIVO","distanciaCm":50}'
+  -d '{"mode":"PASSIVE","distanceCm":50}'
 ```
 
 - Si el token antiguo devuelve `201`: sigue activo. Parar, revisar `APP_DEVICE_TOKEN` en Railway y repetir el
   paso 4 antes de seguir.
 - Si el token nuevo devuelve `401`/`403`: el valor de Railway no coincide con `$NEW_TOKEN` o el despliegue no
   ha terminado.
-- Si devuelve `400`: el cuerpo no cumple `EventoRequest` (`modo` debe ser `PASIVO` o `ACTIVO`; `distanciaCm`
+- Si devuelve `400`: el cuerpo no cumple `EventRequest` (`mode` debe ser `PASSIVE` o `ACTIVE`; `distanceCm`
   entre 0 y 500). La autenticacion si funciona.
 - Si devuelve `500`: revisar los logs de Railway antes de seguir.
 - El `201` crea un evento real asociado al correo de `APP_DEVICE_OWNER_EMAIL`. Borrarlo desde la aplicacion si
@@ -325,9 +325,9 @@ cambiarse con la variable de entorno indicada.
 
 | Limite | Ambito | Valor por defecto | Variables | Donde se aplica |
 |---|---|---|---|---|
-| Login por IP | `POST /auth/login`, por IP | 10 peticiones por 60 s | `APP_RATELIMIT_LOGIN_MAX`, `APP_RATELIMIT_LOGIN_VENTANA` | `RateLimitFilter` |
-| Registro por IP | `POST /auth/registro`, por IP | 10 peticiones por 3600 s | `APP_RATELIMIT_REGISTRO_MAX`, `APP_RATELIMIT_REGISTRO_VENTANA` | `RateLimitFilter` |
-| Login por cuenta | fallos de `POST /auth/login` por correo normalizado | 5 fallos por 900 s | `APP_RATELIMIT_CUENTA_MAX`, `APP_RATELIMIT_CUENTA_VENTANA` | `BloqueoCuentaService`, llamado desde `AuthController` |
+| Login por IP | `POST /auth/login`, por IP | 10 peticiones por 60 s | `APP_RATELIMIT_LOGIN_MAX`, `APP_RATELIMIT_LOGIN_WINDOW` | `RateLimitFilter` |
+| Registro por IP | `POST /auth/register`, por IP | 10 peticiones por 3600 s | `APP_RATELIMIT_REGISTER_MAX`, `APP_RATELIMIT_REGISTER_WINDOW` | `RateLimitFilter` |
+| Login por cuenta | fallos de `POST /auth/login` por correo normalizado | 5 fallos por 900 s | `APP_RATELIMIT_ACCOUNT_MAX`, `APP_RATELIMIT_ACCOUNT_WINDOW` | `AccountLockoutService`, llamado desde `AuthController` |
 | Interruptor general | solo el limite por IP | activado | `APP_RATELIMIT_ENABLED` | `RateLimitFilter` |
 
 Notas:

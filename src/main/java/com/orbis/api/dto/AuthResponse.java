@@ -6,7 +6,7 @@ package com.orbis.api.dto;
  */
 public record AuthResponse(
         Long   id,
-        String nombre,
-        String correo,
-        String mensaje    // "Registro exitoso" / "Login exitoso"
+        String name,
+        String email,
+        String message    // "Registro exitoso" / "Login exitoso"
 ) {}

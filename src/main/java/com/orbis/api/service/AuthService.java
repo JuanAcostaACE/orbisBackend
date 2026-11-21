@@ -2,10 +2,10 @@ package com.orbis.api.service;
 
 import com.orbis.api.dto.AuthResponse;
 import com.orbis.api.dto.LoginRequest;
-import com.orbis.api.dto.RegistroRequest;
-import com.orbis.api.dto.RegistroResponse;
-import com.orbis.api.model.Usuario;
-import com.orbis.api.repository.UsuarioRepository;
+import com.orbis.api.dto.RegisterRequest;
+import com.orbis.api.dto.RegisterResponse;
+import com.orbis.api.model.UserAccount;
+import com.orbis.api.repository.UserAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,14 +29,14 @@ public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     /** Mensaje único de registro: no promete envío de correo ni confirma existencia. */
-    public static final String MENSAJE_REGISTRO =
+    public static final String REGISTER_MESSAGE =
             "Solicitud procesada. Inicia sesión para continuar.";
 
-    private final UsuarioRepository usuarioRepository;
+    private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder   passwordEncoder;
 
-    public AuthService(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder) {
-        this.usuarioRepository = usuarioRepository;
+    public AuthService(UserAccountRepository userAccountRepository, PasswordEncoder passwordEncoder) {
+        this.userAccountRepository = userAccountRepository;
         this.passwordEncoder   = passwordEncoder;
     }
 
@@ -51,27 +51,27 @@ public class AuthService {
      * No es transaccional a propósito: una excepción de restricción dentro de una transacción
      * abierta la marcaría como rollback-only y el commit fallaría.
      */
-    public RegistroResponse registrar(RegistroRequest request) {
-        String correo = normalizarCorreo(request.correo());
-        String hash   = passwordEncoder.encode(request.contrasena());
+    public RegisterResponse register(RegisterRequest request) {
+        String email = normalizeEmail(request.email());
+        String hash   = passwordEncoder.encode(request.password());
 
-        if (usuarioRepository.existsByCorreo(correo)) {
-            return respuestaRegistro();
+        if (userAccountRepository.existsByEmail(email)) {
+            return registerResponse();
         }
 
-        Usuario u = new Usuario();
-        u.setNombre(request.nombre().trim());
-        u.setCorreo(correo);
-        u.setHashContrasena(hash);
-        u.setActivo(true);
+        UserAccount u = new UserAccount();
+        u.setName(request.name().trim());
+        u.setEmail(email);
+        u.setPasswordHash(hash);
+        u.setActive(true);
 
         try {
-            usuarioRepository.saveAndFlush(u);
+            userAccountRepository.saveAndFlush(u);
         } catch (DataIntegrityViolationException e) {
             // Carrera: otro registro con el mismo correo se insertó entre la comprobación y el insert.
             log.debug("Registro con restricción UNIQUE; se responde igual que un duplicado");
         }
-        return respuestaRegistro();
+        return registerResponse();
     }
 
     /**
@@ -81,15 +81,15 @@ public class AuthService {
      * @throws BadCredentialsException si el correo no existe o la contraseña no coincide.
      */
     @Transactional(readOnly = true)
-    public AuthResponse validarCredenciales(LoginRequest request) {
-        Usuario u = usuarioRepository.findByCorreo(normalizarCorreo(request.correo()))
+    public AuthResponse validateCredentials(LoginRequest request) {
+        UserAccount u = userAccountRepository.findByEmail(normalizeEmail(request.email()))
                 .orElseThrow(() -> new BadCredentialsException("Credenciales incorrectas"));
 
-        if (!u.isActivo()) {
+        if (!u.isActive()) {
             throw new BadCredentialsException("Cuenta desactivada");
         }
 
-        if (!passwordEncoder.matches(request.contrasena(), u.getHashContrasena())) {
+        if (!passwordEncoder.matches(request.password(), u.getPasswordHash())) {
             throw new BadCredentialsException("Credenciales incorrectas");
         }
 
@@ -97,16 +97,16 @@ public class AuthService {
     }
 
     /** Normaliza el correo para comparaciones y almacenamiento: sin espacios y en minúsculas. */
-    public static String normalizarCorreo(String correo) {
-        return correo.trim().toLowerCase(Locale.ROOT);
+    public static String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 
-    private static RegistroResponse respuestaRegistro() {
-        return new RegistroResponse(201, MENSAJE_REGISTRO);
+    private static RegisterResponse registerResponse() {
+        return new RegisterResponse(201, REGISTER_MESSAGE);
     }
 
     /** Convierte un Usuario a AuthResponse (sin hash). */
-    private AuthResponse toResponse(Usuario u, String mensaje) {
-        return new AuthResponse(u.getId(), u.getNombre(), u.getCorreo(), mensaje);
+    private AuthResponse toResponse(UserAccount u, String message) {
+        return new AuthResponse(u.getId(), u.getName(), u.getEmail(), message);
     }
 }

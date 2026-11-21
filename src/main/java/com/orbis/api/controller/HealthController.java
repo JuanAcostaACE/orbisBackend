@@ -22,7 +22,7 @@ public class HealthController {
     public ResponseEntity<Map<String, Object>> health() {
         return ResponseEntity.ok(Map.of(
                 "status",    "UP",
-                "servicio",  "ORBIS Backend",
+                "service",  "ORBIS Backend",
                 "timestamp", LocalDateTime.now().toString()
         ));
     }

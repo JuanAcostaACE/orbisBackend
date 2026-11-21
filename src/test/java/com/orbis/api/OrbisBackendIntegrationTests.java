@@ -28,9 +28,9 @@ class OrbisBackendIntegrationTests {
     }
 
     @Test
-    @DisplayName("EventoService está en el contexto")
-    void eventoServiceExists() {
-        assertThat(context.containsBean("eventoService")).isTrue();
+    @DisplayName("EventService está en el contexto")
+    void eventServiceExists() {
+        assertThat(context.containsBean("eventService")).isTrue();
     }
 
     @Test

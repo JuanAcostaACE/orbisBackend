@@ -2,7 +2,7 @@ package com.orbis.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orbis.api.dto.LoginRequest;
-import com.orbis.api.dto.RegistroRequest;
+import com.orbis.api.dto.RegisterRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,10 +22,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
                 "spring.datasource.url=jdbc:h2:mem:rate-limit;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
-                "app.ratelimit.login.max-intentos=2",
-                "app.ratelimit.login.ventana-segundos=60",
-                "app.ratelimit.registro.max-intentos=1",
-                "app.ratelimit.registro.ventana-segundos=3600"
+                "app.ratelimit.login.max-attempts=2",
+                "app.ratelimit.login.window-seconds=60",
+                "app.ratelimit.register.max-attempts=1",
+                "app.ratelimit.register.window-seconds=3600"
         })
 @AutoConfigureMockMvc
 class RateLimitHttpTest {
@@ -35,38 +35,38 @@ class RateLimitHttpTest {
 
     @Test
     @DisplayName("POST /auth/login supera el límite → 429 con JSON y Retry-After")
-    void login_excede_limite_429() throws Exception {
-        String cuerpo = mapper.writeValueAsString(new LoginRequest("nadie@test.com", "contraseña_mala"));
+    void login_exceeds_limit_429() throws Exception {
+        String responseBody = mapper.writeValueAsString(new LoginRequest("nadie@test.com", "contraseña_mala"));
 
         for (int i = 0; i < 2; i++) {
             mvc.perform(post("/auth/login")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(cuerpo))
+                    .content(responseBody))
                     .andExpect(status().isUnauthorized());
         }
 
         mvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(cuerpo))
+                .content(responseBody))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists("Retry-After"))
                 .andExpect(jsonPath("$.status").value(429))
-                .andExpect(jsonPath("$.mensaje").exists())
+                .andExpect(jsonPath("$.message").exists())
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 
     @Test
-    @DisplayName("POST /auth/registro supera el límite → 429")
-    void registro_excede_limite_429() throws Exception {
-        mvc.perform(post("/auth/registro")
+    @DisplayName("POST /auth/register supera el límite → 429")
+    void register_exceeds_limit_429() throws Exception {
+        mvc.perform(post("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(mapper.writeValueAsString(new RegistroRequest(
+                .content(mapper.writeValueAsString(new RegisterRequest(
                         "Primero", "primero-rl@test.com", "contraseña_segura_123"))))
                 .andExpect(status().isCreated());
 
-        mvc.perform(post("/auth/registro")
+        mvc.perform(post("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(mapper.writeValueAsString(new RegistroRequest(
+                .content(mapper.writeValueAsString(new RegisterRequest(
                         "Segundo", "segundo-rl@test.com", "contraseña_segura_123"))))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.status").value(429));
@@ -74,7 +74,7 @@ class RateLimitHttpTest {
 
     @Test
     @DisplayName("Las rutas no limitadas (GET /health) no se ven afectadas")
-    void health_no_limitado() throws Exception {
+    void health_not_rate_limited() throws Exception {
         for (int i = 0; i < 5; i++) {
             mvc.perform(get("/health")).andExpect(status().isOk());
         }

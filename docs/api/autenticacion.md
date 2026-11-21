@@ -6,13 +6,13 @@ El backend acepta dos mecanismos:
    `ORBIS_SID` (HttpOnly, SameSite=Strict, Secure en producción, 8 h).
    El navegador debe enviar las peticiones con `credentials: 'include'`.
 2. **Dispositivo ESP32**: cabecera `X-Device-Token` con el valor de `APP_DEVICE_TOKEN`.
-   Obtiene `ROLE_DEVICE` y solo puede usar `POST /api/v1/eventos`. Los eventos quedan a
+   Obtiene `ROLE_DEVICE` y solo puede usar `POST /api/v1/events`. Los eventos quedan a
    nombre de `APP_DEVICE_OWNER_EMAIL`.
 
 ## CSRF
 
 Las mutaciones con sesión requieren la cabecera `X-XSRF-TOKEN` con el valor de la cookie
-`XSRF-TOKEN`. Están excluidas `/auth/**`, `POST /api/v1/eventos` y `/health`.
+`XSRF-TOKEN`. Están excluidas `/auth/**`, `POST /api/v1/events` y `/health`.
 
 ## CORS
 
