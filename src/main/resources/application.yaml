@@ -93,21 +93,21 @@ app:
     ownerEmail: ${APP_DEVICE_OWNER_EMAIL:}
 
   # ── Limitador de peticiones por IP (ventana fija, en memoria) ──
-  # Aplica solo a POST /auth/login y POST /auth/registro. Responde 429 al exceder.
+  # Aplica solo a POST /auth/login y POST /auth/register. Responde 429 al exceder.
   # Detrás de un proxy (Railway), la IP es la del proxy: ver README.
   ratelimit:
     enabled: ${APP_RATELIMIT_ENABLED:true}
     login:
-      max-intentos: ${APP_RATELIMIT_LOGIN_MAX:10}
-      ventana-segundos: ${APP_RATELIMIT_LOGIN_VENTANA:60}
-    registro:
-      max-intentos: ${APP_RATELIMIT_REGISTRO_MAX:10}
-      ventana-segundos: ${APP_RATELIMIT_REGISTRO_VENTANA:3600}
+      max-attempts: ${APP_RATELIMIT_LOGIN_MAX:10}
+      window-seconds: ${APP_RATELIMIT_LOGIN_WINDOW:60}
+    register:
+      max-attempts: ${APP_RATELIMIT_REGISTER_MAX:10}
+      window-seconds: ${APP_RATELIMIT_REGISTER_WINDOW:3600}
     # Límite por CUENTA (correo normalizado) en login, independiente de la IP.
-    # Tras max-intentos fallos en la ventana, la cuenta responde 429 hasta que caduque.
-    cuenta:
-      max-intentos: ${APP_RATELIMIT_CUENTA_MAX:5}
-      ventana-segundos: ${APP_RATELIMIT_CUENTA_VENTANA:900}
+    # Tras max-attempts fallos en la ventana, la cuenta responde 429 hasta que caduque.
+    account:
+      max-attempts: ${APP_RATELIMIT_ACCOUNT_MAX:5}
+      window-seconds: ${APP_RATELIMIT_ACCOUNT_WINDOW:900}
 
 ---
 # PERFIL: dev (desarrollo local explícito)

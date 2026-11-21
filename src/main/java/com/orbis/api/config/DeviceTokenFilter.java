@@ -96,9 +96,9 @@ public class DeviceTokenFilter extends OncePerRequestFilter {
                 byte[] headerBytes = header.getBytes(StandardCharsets.UTF_8);
 
                 // Comparación en tiempo constante (timing-safe)
-                boolean tokenValido = MessageDigest.isEqual(deviceTokenBytes, headerBytes);
+                boolean validToken = MessageDigest.isEqual(deviceTokenBytes, headerBytes);
 
-                if (tokenValido) {
+                if (validToken) {
                     SecurityContext ctx = SecurityContextHolder.createEmptyContext();
                     ctx.setAuthentication(new UsernamePasswordAuthenticationToken(
                             DEVICE_PRINCIPAL,

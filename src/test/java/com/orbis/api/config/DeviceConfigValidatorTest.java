@@ -20,18 +20,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class DeviceConfigValidatorTest {
 
-    private static final String TOKEN_FALSO = "test-token-combinacion-1";
-    private static final String CORREO_VALIDO = "dueno-prueba@test.com";
+    private static final String FAKE_TOKEN = "test-token-combinacion-1";
+    private static final String VALID_EMAIL = "dueno-prueba@test.com";
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withUserConfiguration(DeviceConfigValidator.class);
 
     @Test
     @DisplayName("Combinación 1: token + owner válidos → el contexto arranca")
-    void combinacion1_token_y_owner_validos_arranca() {
+    void combination1_valid_token_and_owner_starts() {
         runner.withPropertyValues(
-                        "app.device.token=" + TOKEN_FALSO,
-                        "app.device.ownerEmail=" + CORREO_VALIDO)
+                        "app.device.token=" + FAKE_TOKEN,
+                        "app.device.ownerEmail=" + VALID_EMAIL)
                 .run(ctx -> {
                     assertThat(ctx).hasNotFailed();
                     assertThat(ctx).hasSingleBean(DeviceConfigValidator.class);
@@ -40,66 +40,66 @@ class DeviceConfigValidatorTest {
 
     @Test
     @DisplayName("Combinación 2: token definido sin owner → el arranque falla nombrando APP_DEVICE_OWNER_EMAIL")
-    void combinacion2_token_sin_owner_falla_arranque() {
-        runner.withPropertyValues("app.device.token=" + TOKEN_FALSO)
+    void combination2_token_without_owner_fails_startup() {
+        runner.withPropertyValues("app.device.token=" + FAKE_TOKEN)
                 .run(ctx -> {
                     assertThat(ctx).hasFailed();
                     assertThat(ctx.getStartupFailure()).hasRootCauseInstanceOf(IllegalStateException.class);
                     assertThat(ctx.getStartupFailure().getCause().getMessage())
                             .contains("APP_DEVICE_OWNER_EMAIL")
-                            .doesNotContain(TOKEN_FALSO);
+                            .doesNotContain(FAKE_TOKEN);
                 });
     }
 
     @Test
     @DisplayName("Combinación 3: owner definido sin token → PERMITIDO (auth de dispositivo deshabilitada, no falla)")
-    void combinacion3_owner_sin_token_permitido_auth_deshabilitada() {
-        runner.withPropertyValues("app.device.ownerEmail=" + CORREO_VALIDO)
+    void combination3_owner_without_token_allowed_auth_disabled() {
+        runner.withPropertyValues("app.device.ownerEmail=" + VALID_EMAIL)
                 .run(ctx -> assertThat(ctx).hasNotFailed());
     }
 
     @Test
     @DisplayName("Combinación 4: token y owner vacíos → PERMITIDO (auth de dispositivo deshabilitada)")
-    void combinacion4_ambos_vacios_permitido_auth_deshabilitada() {
+    void combination4_both_empty_allowed_auth_disabled() {
         runner.run(ctx -> assertThat(ctx).hasNotFailed());
     }
 
     @Test
     @DisplayName("Combinación 5: token definido con owner de formato inválido → el arranque falla")
-    void combinacion5_token_con_owner_email_invalido_falla_arranque() {
+    void combination5_token_with_invalid_owner_email_fails_startup() {
         runner.withPropertyValues(
-                        "app.device.token=" + TOKEN_FALSO,
+                        "app.device.token=" + FAKE_TOKEN,
                         "app.device.ownerEmail=no-es-un-correo")
                 .run(ctx -> {
                     assertThat(ctx).hasFailed();
                     assertThat(ctx.getStartupFailure().getCause().getMessage())
                             .contains("APP_DEVICE_OWNER_EMAIL")
                             .doesNotContain("no-es-un-correo")
-                            .doesNotContain(TOKEN_FALSO);
+                            .doesNotContain(FAKE_TOKEN);
                 });
     }
 
     @Test
     @DisplayName("Token solo con espacios se trata como vacío: owner ausente no falla")
-    void token_en_blanco_se_trata_como_deshabilitado() {
-        assertThatCode(() -> DeviceConfigValidator.validar("   ", ""))
+    void blank_token_treated_as_disabled() {
+        assertThatCode(() -> DeviceConfigValidator.validate("   ", ""))
                 .doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("validar: token definido y owner con espacios alrededor válido pasa")
-    void validar_acepta_owner_con_espacios_alrededor() {
-        assertThatCode(() -> DeviceConfigValidator.validar(TOKEN_FALSO, "  " + CORREO_VALIDO + "  "))
+    void validate_accepts_owner_with_surrounding_spaces() {
+        assertThatCode(() -> DeviceConfigValidator.validate(FAKE_TOKEN, "  " + VALID_EMAIL + "  "))
                 .doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("validar: token definido y owner sin arroba lanza IllegalStateException sin valores")
-    void validar_rechaza_owner_sin_arroba() {
-        assertThatThrownBy(() -> DeviceConfigValidator.validar(TOKEN_FALSO, "dueno.test.com"))
+    void validate_rejects_owner_without_at_sign() {
+        assertThatThrownBy(() -> DeviceConfigValidator.validate(FAKE_TOKEN, "dueno.test.com"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("APP_DEVICE_OWNER_EMAIL")
-                .hasMessageNotContaining(TOKEN_FALSO)
+                .hasMessageNotContaining(FAKE_TOKEN)
                 .hasMessageNotContaining("dueno.test.com");
     }
 }

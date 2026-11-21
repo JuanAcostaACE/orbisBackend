@@ -30,48 +30,48 @@ class VisionAdapterTest {
 
     @Test
     @DisplayName("null → VisionException")
-    void entrada_nula() {
-        assertThatThrownBy(() -> adapter.analizarImagen(null))
+    void input_null() {
+        assertThatThrownBy(() -> adapter.analyzeImage(null))
             .isInstanceOf(VisionException.class)
             .hasMessageContaining("nulas o vacías");
     }
 
     @Test
     @DisplayName("blank → VisionException")
-    void entrada_vacia() {
-        assertThatThrownBy(() -> adapter.analizarImagen("   "))
+    void input_empty() {
+        assertThatThrownBy(() -> adapter.analyzeImage("   "))
             .isInstanceOf(VisionException.class);
     }
 
     @Test
     @DisplayName("demasiado larga (>2000) → VisionException")
-    void entrada_demasiado_larga() {
-        String larga = "A".repeat(2001);
-        assertThatThrownBy(() -> adapter.analizarImagen(larga))
+    void input_too_long() {
+        String longValue = "A".repeat(2001);
+        assertThatThrownBy(() -> adapter.analyzeImage(longValue))
             .isInstanceOf(VisionException.class)
             .hasMessageContaining("demasiado largas");
     }
 
     @Test
     @DisplayName("empieza con ERROR → VisionException")
-    void entrada_error_cliente() {
-        assertThatThrownBy(() -> adapter.analizarImagen("ERROR_IA: failed to load"))
+    void input_client_error() {
+        assertThatThrownBy(() -> adapter.analyzeImage("ERROR_IA: failed to load"))
             .isInstanceOf(VisionException.class)
             .hasMessageContaining("error del cliente");
     }
 
     @Test
     @DisplayName("parece base64 data: → VisionException")
-    void entrada_base64_data() {
-        assertThatThrownBy(() -> adapter.analizarImagen("data:image/jpeg;base64,/9j/abc"))
+    void input_base64_data() {
+        assertThatThrownBy(() -> adapter.analyzeImage("data:image/jpeg;base64,/9j/abc"))
             .isInstanceOf(VisionException.class)
             .hasMessageContaining("base64");
     }
 
     @Test
     @DisplayName("contiene HTML → VisionException")
-    void entrada_html_peligroso() {
-        assertThatThrownBy(() -> adapter.analizarImagen("<script>alert(1)</script>"))
+    void input_dangerous_html() {
+        assertThatThrownBy(() -> adapter.analyzeImage("<script>alert(1)</script>"))
             .isInstanceOf(VisionException.class)
             .hasMessageContaining("caracteres no permitidos");
     }
@@ -80,45 +80,45 @@ class VisionAdapterTest {
 
     @Test
     @DisplayName("etiquetas simples → capitalización y lista")
-    void normalizacion_simple() {
-        List<String> resultado = adapter.analizarImagen("chair, table, person");
-        assertThat(resultado).containsExactly("Chair", "Table", "Person");
+    void simple_normalization() {
+        List<String> outcome = adapter.analyzeImage("chair, table, person");
+        assertThat(outcome).containsExactly("Chair", "Table", "Person");
     }
 
     @Test
     @DisplayName("más de 5 etiquetas → truncado a 5")
-    void limite_etiquetas() {
-        String muchas = "a, b, c, d, e, f, g, h";
-        List<String> resultado = adapter.analizarImagen(muchas);
-        assertThat(resultado.size()).isLessThanOrEqualTo(5);
+    void labels_limit() {
+        String many = "a, b, c, d, e, f, g, h";
+        List<String> outcome = adapter.analyzeImage(many);
+        assertThat(outcome.size()).isLessThanOrEqualTo(5);
     }
 
     @Test
     @DisplayName("etiquetas con porcentaje → conservadas si sobre umbral")
-    void etiquetas_con_porcentaje_sobre_umbral() {
-        List<String> resultado = adapter.analizarImagen("Chair (85%), Table (60%)");
-        assertThat(resultado).containsExactly("Chair (85%)", "Table (60%)");
+    void labels_with_percentage_above_threshold() {
+        List<String> outcome = adapter.analyzeImage("Chair (85%), Table (60%)");
+        assertThat(outcome).containsExactly("Chair (85%)", "Table (60%)");
     }
 
     @Test
     @DisplayName("etiquetas con porcentaje < 40% → filtradas")
-    void etiquetas_con_porcentaje_bajo_umbral() {
-        List<String> resultado = adapter.analizarImagen("Chair (85%), Noise (30%), Table (70%)");
-        assertThat(resultado).doesNotContain("Noise (30%)");
-        assertThat(resultado).containsExactlyInAnyOrder("Chair (85%)", "Table (70%)");
+    void labels_with_percentage_below_threshold() {
+        List<String> outcome = adapter.analyzeImage("Chair (85%), Noise (30%), Table (70%)");
+        assertThat(outcome).doesNotContain("Noise (30%)");
+        assertThat(outcome).containsExactlyInAnyOrder("Chair (85%)", "Table (70%)");
     }
 
     @Test
     @DisplayName("etiquetas sin porcentaje → formato legacy MobileNet")
-    void etiquetas_legacy_mobilenet() {
-        List<String> resultado = adapter.analizarImagen("tabby cat, coffee mug");
-        assertThat(resultado).containsExactly("Tabby cat", "Coffee mug");
+    void legacy_mobilenet_labels() {
+        List<String> outcome = adapter.analyzeImage("tabby cat, coffee mug");
+        assertThat(outcome).containsExactly("Tabby cat", "Coffee mug");
     }
 
     @Test
     @DisplayName("formato COCO-SSD mixto → normalizado correctamente")
-    void formato_coco_ssd() {
-        List<String> resultado = adapter.analizarImagen("Person (92%), Chair (78%), Laptop (65%)");
-        assertThat(resultado).containsExactly("Person (92%)", "Chair (78%)", "Laptop (65%)");
+    void coco_ssd_format() {
+        List<String> outcome = adapter.analyzeImage("Person (92%), Chair (78%), Laptop (65%)");
+        assertThat(outcome).containsExactly("Person (92%)", "Chair (78%)", "Laptop (65%)");
     }
 }

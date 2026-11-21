@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * Protege solo los endpoints sensibles a fuerza bruta o abuso:
  *   - POST /auth/login     → app.ratelimit.login.*
- *   - POST /auth/registro  → app.ratelimit.registro.*
+ *   - POST /auth/register  → app.ratelimit.register.*
  *
  * Cada intento (correcto o no) cuenta dentro de la ventana. Al superar el máximo
  * responde 429 con el mismo cuerpo JSON que el resto de la API ({status, mensaje, timestamp})
@@ -36,26 +36,26 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     static final String LOGIN_PATH    = "/auth/login";
-    static final String REGISTRO_PATH = "/auth/registro";
+    static final String REGISTER_PATH = "/auth/register";
 
     /** Cada cuántas entradas nuevas se limpian las ventanas caducadas. */
-    private static final int LIMPIEZA_UMBRAL = 5_000;
+    private static final int CLEANUP_THRESHOLD = 5_000;
 
     private final boolean enabled;
-    private final Regla   login;
-    private final Regla   registro;
+    private final Rule   login;
+    private final Rule   register;
 
-    private final Map<String, Ventana> ventanas = new ConcurrentHashMap<>();
+    private final Map<String, Window> windows = new ConcurrentHashMap<>();
 
     public RateLimitFilter(
             @Value("${app.ratelimit.enabled:true}")                 boolean enabled,
-            @Value("${app.ratelimit.login.max-intentos:10}")        int loginMax,
-            @Value("${app.ratelimit.login.ventana-segundos:60}")    long loginVentana,
-            @Value("${app.ratelimit.registro.max-intentos:10}")     int registroMax,
-            @Value("${app.ratelimit.registro.ventana-segundos:3600}") long registroVentana) {
+            @Value("${app.ratelimit.login.max-attempts:10}")        int loginMax,
+            @Value("${app.ratelimit.login.window-seconds:60}")    long loginWindow,
+            @Value("${app.ratelimit.register.max-attempts:10}")     int registerMax,
+            @Value("${app.ratelimit.register.window-seconds:3600}") long registerWindow) {
         this.enabled  = enabled;
-        this.login    = new Regla("login",    loginMax,    loginVentana * 1000L);
-        this.registro = new Regla("registro", registroMax, registroVentana * 1000L);
+        this.login    = new Rule("login",    loginMax,    loginWindow * 1000L);
+        this.register = new Rule("register", registerMax, registerWindow * 1000L);
     }
 
     @Override
@@ -65,38 +65,38 @@ public class RateLimitFilter extends OncePerRequestFilter {
             @NonNull FilterChain         filterChain
     ) throws ServletException, IOException {
 
-        Regla regla = enabled ? reglaPara(request) : null;
-        if (regla == null) {
+        Rule rule = enabled ? ruleFor(request) : null;
+        if (rule == null) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        long ahora = System.currentTimeMillis();
-        String clave = regla.nombre + "|" + request.getRemoteAddr();
+        long now = System.currentTimeMillis();
+        String key = rule.name + "|" + request.getRemoteAddr();
 
-        Ventana ventana = ventanas.compute(clave, (k, actual) ->
-                (actual == null || ahora - actual.inicioMs >= regla.ventanaMs)
-                        ? new Ventana(ahora)
-                        : actual);
+        Window window = windows.compute(key, (k, current) ->
+                (current == null || now - current.startMs >= rule.windowMs)
+                        ? new Window(now)
+                        : current);
 
-        int intento = ventana.contador.incrementAndGet();
+        int attempt = window.counter.incrementAndGet();
 
-        if (ventanas.size() > LIMPIEZA_UMBRAL) {
-            limpiarVentanasCaducadas(ahora);
+        if (windows.size() > CLEANUP_THRESHOLD) {
+            clearExpiredWindows(now);
         }
 
-        if (intento > regla.maxIntentos) {
-            long segundosRestantes = Math.max(1L,
-                    (regla.ventanaMs - (ahora - ventana.inicioMs) + 999L) / 1000L);
+        if (attempt > rule.maxAttempts) {
+            long remainingSeconds = Math.max(1L,
+                    (rule.windowMs - (now - window.startMs) + 999L) / 1000L);
             response.setStatus(429);
-            response.setHeader("Retry-After", String.valueOf(segundosRestantes));
+            response.setHeader("Retry-After", String.valueOf(remainingSeconds));
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write(
                     "{\"status\":429,"
-                  + "\"mensaje\":\"Demasiados intentos. Intenta de nuevo más tarde\","
+                  + "\"message\":\"Demasiados intentos. Intenta de nuevo más tarde\","
                   + "\"timestamp\":\"" + LocalDateTime.now() + "\"}"
             );
-            logger.warn("Límite de peticiones alcanzado (" + regla.nombre
+            logger.warn("Límite de peticiones alcanzado (" + rule.name
                       + ") desde IP: " + request.getRemoteAddr());
             return;
         }
@@ -104,31 +104,31 @@ public class RateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private Regla reglaPara(HttpServletRequest request) {
+    private Rule ruleFor(HttpServletRequest request) {
         if (!"POST".equalsIgnoreCase(request.getMethod())) {
             return null;
         }
-        String ruta = request.getRequestURI();
-        if (LOGIN_PATH.equals(ruta))    return login;
-        if (REGISTRO_PATH.equals(ruta)) return registro;
+        String uri = request.getRequestURI();
+        if (LOGIN_PATH.equals(uri))    return login;
+        if (REGISTER_PATH.equals(uri)) return register;
         return null;
     }
 
-    private void limpiarVentanasCaducadas(long ahora) {
-        long maxVentana = Math.max(login.ventanaMs, registro.ventanaMs);
-        ventanas.entrySet().removeIf(e -> ahora - e.getValue().inicioMs >= maxVentana);
+    private void clearExpiredWindows(long now) {
+        long maxWindow = Math.max(login.windowMs, register.windowMs);
+        windows.entrySet().removeIf(e -> now - e.getValue().startMs >= maxWindow);
     }
 
     /** Configuración de un límite concreto. */
-    private record Regla(String nombre, int maxIntentos, long ventanaMs) {}
+    private record Rule(String name, int maxAttempts, long windowMs) {}
 
-    /** Contador de una ventana fija que empieza en inicioMs. */
-    private static final class Ventana {
-        final long inicioMs;
-        final AtomicInteger contador = new AtomicInteger(0);
+    /** Contador de una ventana fija que empieza en startMs. */
+    private static final class Window {
+        final long startMs;
+        final AtomicInteger counter = new AtomicInteger(0);
 
-        Ventana(long inicioMs) {
-            this.inicioMs = inicioMs;
+        Window(long startMs) {
+            this.startMs = startMs;
         }
     }
 }

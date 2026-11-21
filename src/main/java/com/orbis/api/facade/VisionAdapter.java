@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  *   modelo de dominio interno de ORBIS. Sus tres funciones concretas son:
  *
  *   1. VALIDACIÓN de entradas crudas:
- *      - Verifica que etiquetasIA no sea nula, vacía o demasiado larga.
+ *      - Verifica que aiLabels no sea nula, vacía o demasiado larga.
  *      - Rechaza entradas que empiecen con "ERROR" (errores del cliente, no dominio).
  *      - Rechaza entradas que empiecen con "data:" o contengan base64 embebido
  *        (protección contra payloads accidentales).
@@ -22,21 +22,21 @@ import java.util.regex.Pattern;
  *   2. NORMALIZACIÓN de formato:
  *      - Convierte a formato canónico: "Clase1, Clase2 (85%), Clase3"
  *      - Capitaliza cada etiqueta.
- *      - Trunca a MAX_ETIQUETAS etiquetas para evitar payloads excesivos.
+ *      - Trunca a MAX_LABELS etiquetas para evitar payloads excesivos.
  *      - Elimina caracteres de control o peligrosos (hardening XSS en dominio).
  *
  *   3. FILTRADO POR UMBRAL:
  *      - Si las etiquetas contienen porcentajes de confianza (formato GestorVision),
- *        descarta las que estén por debajo de UMBRAL_MINIMO_CONFIANZA.
+ *        descarta las que estén por debajo de MIN_CONFIDENCE_THRESHOLD.
  *      - Si no contienen porcentaje, pasa la etiqueta tal cual (legacy / MobileNet).
  *
  * RELACIÓN CON LOS 6 PATRONES:
  *   Facade/Adapter → VisionAdapter (este archivo)
- *   Strategy       → ActivoStrategy invoca VisionAdapter vía VisionFacade (interfaz)
- *   Command        → ComandoConsultarIA encapsula la llamada al Adapter
- *   Observer       → LogEventoObserver notificado después de guardar
- *   State          → ContextoSistema actualiza estado según el modo del evento
- *   Factory Method → StrategyFactory selecciona ACTIVO vs PASIVO según el modo
+ *   Strategy       → ActiveStrategy invoca VisionAdapter vía VisionFacade (interfaz)
+ *   Command        → QueryAiCommand encapsula la llamada al Adapter
+ *   Observer       → LogEventObserver notificado después de guardar
+ *   State          → SystemContext actualiza estado según el modo del evento
+ *   Factory Method → StrategyFactory selecciona ACTIVE vs PASSIVE según el modo
  *
  * LOADOUT — Nota de clarificación:
  *   El término "loadout" no existe en el código fuente de ORBIS.
@@ -52,44 +52,44 @@ import java.util.regex.Pattern;
 public class VisionAdapter implements VisionFacade {
 
     /** Longitud máxima de la cadena de etiquetas aceptada del cliente. */
-    private static final int    MAX_LONGITUD_ETIQUETAS = 2000;
+    private static final int    MAX_LABELS_LENGTH = 2000;
 
     /** Máximo de etiquetas distintas a conservar. */
-    private static final int    MAX_ETIQUETAS = 5;
+    private static final int    MAX_LABELS = 5;
 
     /** Umbral de confianza mínimo al interpretar etiquetas con porcentaje (0-100). */
-    private static final double UMBRAL_MINIMO_CONFIANZA = 40.0; // 40%
+    private static final double MIN_CONFIDENCE_THRESHOLD = 40.0; // 40%
 
     /** Patrón para extraer etiqueta + porcentaje opcional: "Chair (85%)" o "Chair". */
-    private static final Pattern PATRON_ETIQUETA =
+    private static final Pattern LABEL_PATTERN =
         Pattern.compile("([A-Za-záéíóúÁÉÍÓÚñÑ][\\w\\sáéíóúÁÉÍÓÚñÑ]{0,50}?)\\s*(?:\\((\\d{1,3})%\\))?");
 
     /** Patrón para detectar caracteres de control o HTML/script peligrosos. */
-    private static final Pattern PATRON_PELIGROSO =
+    private static final Pattern DANGEROUS_PATTERN =
         Pattern.compile("[<>\"'`\\x00-\\x1F\\x7F]");
 
     @Override
-    public List<String> analizarImagen(String etiquetasCrudas) {
-        validar(etiquetasCrudas);
-        return normalizar(etiquetasCrudas);
+    public List<String> analyzeImage(String rawLabels) {
+        validate(rawLabels);
+        return normalize(rawLabels);
     }
 
     // ──────────────────────────────────────────────────────────────
     // Validación — lanza VisionException ante entradas inválidas
     // ──────────────────────────────────────────────────────────────
 
-    private void validar(String entrada) {
-        if (entrada == null || entrada.isBlank()) {
+    private void validate(String input) {
+        if (input == null || input.isBlank()) {
             throw new VisionException("Etiquetas nulas o vacías");
         }
 
-        if (entrada.length() > MAX_LONGITUD_ETIQUETAS) {
+        if (input.length() > MAX_LABELS_LENGTH) {
             throw new VisionException(
-                "Etiquetas demasiado largas: " + entrada.length() +
-                " chars (máx " + MAX_LONGITUD_ETIQUETAS + ")");
+                "Etiquetas demasiado largas: " + input.length() +
+                " chars (máx " + MAX_LABELS_LENGTH + ")");
         }
 
-        String trim = entrada.trim();
+        String trim = input.trim();
 
         // Rechazar errores del cliente (no son datos de dominio)
         if (trim.startsWith("ERROR")) {
@@ -101,11 +101,11 @@ public class VisionAdapter implements VisionFacade {
         if (trim.startsWith("data:") || trim.startsWith("/9j/") || trim.startsWith("iVBOR")) {
             throw new VisionException(
                 "Entrada parece ser imagen base64, no etiquetas de texto. " +
-                "El cliente debe enviar solo etiquetasIA, no imagenUrl.");
+                "El cliente debe enviar solo aiLabels, no imageUrl.");
         }
 
         // Rechazar caracteres de control / HTML (XSS defense en dominio)
-        if (PATRON_PELIGROSO.matcher(trim).find()) {
+        if (DANGEROUS_PATTERN.matcher(trim).find()) {
             throw new VisionException(
                 "Etiquetas contienen caracteres no permitidos (control/HTML)");
         }
@@ -115,16 +115,16 @@ public class VisionAdapter implements VisionFacade {
     // Normalización — convierte formato crudo → formato canónico ORBIS
     // ──────────────────────────────────────────────────────────────
 
-    private List<String> normalizar(String entrada) {
+    private List<String> normalize(String input) {
         // Dividir por coma o punto y coma
-        String[] partes = entrada.split("[,;]");
+        String[] parts = input.split("[,;]");
 
-        return Arrays.stream(partes)
+        return Arrays.stream(parts)
             .map(String::trim)
             .filter(s -> !s.isBlank())
-            .map(this::normalizarEtiqueta)
+            .map(this::normalizeLabel)
             .filter(e -> e != null)
-            .limit(MAX_ETIQUETAS)
+            .limit(MAX_LABELS)
             .toList();
     }
 
@@ -132,27 +132,27 @@ public class VisionAdapter implements VisionFacade {
      * Normaliza una etiqueta individual.
      * Si tiene porcentaje y no supera el umbral, retorna null (será filtrada).
      */
-    private String normalizarEtiqueta(String raw) {
-        var matcher = PATRON_ETIQUETA.matcher(raw.trim());
+    private String normalizeLabel(String raw) {
+        var matcher = LABEL_PATTERN.matcher(raw.trim());
         if (!matcher.matches()) return null;
 
-        String clase      = matcher.group(1).trim();
-        String porcentaje = matcher.group(2);
+        String className      = matcher.group(1).trim();
+        String percentage = matcher.group(2);
 
-        if (clase.isBlank()) return null;
+        if (className.isBlank()) return null;
 
         // Filtrar por umbral de confianza si hay porcentaje
-        if (porcentaje != null) {
-            double confianza = Double.parseDouble(porcentaje);
-            if (confianza < UMBRAL_MINIMO_CONFIANZA) {
+        if (percentage != null) {
+            double confidence = Double.parseDouble(percentage);
+            if (confidence < MIN_CONFIDENCE_THRESHOLD) {
                 return null; // Descartada por baja confianza
             }
             // Capitalizar y conservar el porcentaje
-            return capitalize(clase) + " (" + porcentaje + "%)";
+            return capitalize(className) + " (" + percentage + "%)";
         }
 
         // Sin porcentaje → legacy / MobileNet → solo capitalizar
-        return capitalize(clase);
+        return capitalize(className);
     }
 
     private String capitalize(String s) {

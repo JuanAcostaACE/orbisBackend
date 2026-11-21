@@ -1,13 +1,13 @@
 package com.orbis.api;
 
-import com.orbis.api.command.ComandoConsultarIA;
-import com.orbis.api.command.EjecutorComando;
+import com.orbis.api.command.QueryAiCommand;
+import com.orbis.api.command.CommandExecutor;
 import com.orbis.api.facade.VisionAdapter;
 import com.orbis.api.facade.VisionException;
 import com.orbis.api.facade.VisionFacade;
-import com.orbis.api.model.RegistroEvento;
-import com.orbis.api.repository.RegistroEventoRepository;
-import com.orbis.api.strategy.ActivoStrategy;
+import com.orbis.api.model.EventRecord;
+import com.orbis.api.repository.EventRecordRepository;
+import com.orbis.api.strategy.ActiveStrategy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,65 +34,65 @@ import static org.mockito.Mockito.when;
 class VisionFacadeTest {
 
     @Mock VisionFacade facadeMock;
-    @Mock RegistroEventoRepository repository;
+    @Mock EventRecordRepository repository;
     @Mock ApplicationEventPublisher publisher;
 
     @Test
     @DisplayName("VisionAdapter implementa VisionFacade")
-    void adapter_implementa_facade() {
+    void adapter_implements_facade() {
         assertThat(new VisionAdapter()).isInstanceOf(VisionFacade.class);
     }
 
     @Test
     @DisplayName("A través de la interfaz: valida, normaliza y filtra por umbral")
-    void facade_normaliza_via_interfaz() {
+    void facade_normalizes_via_interface() {
         VisionFacade facade = new VisionAdapter();
 
-        List<String> resultado = facade.analizarImagen("person (92%), noise (10%), chair");
+        List<String> outcome = facade.analyzeImage("person (92%), noise (10%), chair");
 
-        assertThat(resultado).containsExactly("Person (92%)", "Chair");
+        assertThat(outcome).containsExactly("Person (92%)", "Chair");
     }
 
     @Test
     @DisplayName("Entrada corrupta -> VisionException a través de la interfaz")
-    void facade_propaga_vision_exception() {
+    void facade_propagates_vision_exception() {
         VisionFacade facade = new VisionAdapter();
 
-        assertThatThrownBy(() -> facade.analizarImagen(null)).isInstanceOf(VisionException.class);
-        assertThatThrownBy(() -> facade.analizarImagen("ERROR_IA: fallo")).isInstanceOf(VisionException.class);
-        assertThatThrownBy(() -> facade.analizarImagen("data:image/png;base64,AAAA")).isInstanceOf(VisionException.class);
-        assertThatThrownBy(() -> facade.analizarImagen("<img src=x onerror=alert(1)>")).isInstanceOf(VisionException.class);
+        assertThatThrownBy(() -> facade.analyzeImage(null)).isInstanceOf(VisionException.class);
+        assertThatThrownBy(() -> facade.analyzeImage("ERROR_IA: fallo")).isInstanceOf(VisionException.class);
+        assertThatThrownBy(() -> facade.analyzeImage("data:image/png;base64,AAAA")).isInstanceOf(VisionException.class);
+        assertThatThrownBy(() -> facade.analyzeImage("<img src=x onerror=alert(1)>")).isInstanceOf(VisionException.class);
     }
 
     @Test
     @DisplayName("Todas las etiquetas bajo el umbral -> lista vacía (sin excepción)")
-    void facade_todo_bajo_umbral_devuelve_vacio() {
-        assertThat(new VisionAdapter().analizarImagen("Noise (10%), Blur (20%)")).isEmpty();
+    void facade_all_below_threshold_returns_empty() {
+        assertThat(new VisionAdapter().analyzeImage("Noise (10%), Blur (20%)")).isEmpty();
     }
 
     @Test
-    @DisplayName("ActivoStrategy + VisionAdapter real: etiqueta corrupta -> ERROR_VISION y se guarda")
-    void estrategia_activa_maneja_vision_exception_real() {
-        lenient().when(repository.save(any(RegistroEvento.class))).thenAnswer(inv -> inv.getArgument(0));
-        ActivoStrategy strategy = new ActivoStrategy(repository, new VisionAdapter(), new EjecutorComando(), publisher);
-        RegistroEvento e = new RegistroEvento();
-        e.setModo("ACTIVO");
-        e.setDistanciaCm(35.0);
-        e.setEtiquetasIA("<script>alert(1)</script>");
+    @DisplayName("ActiveStrategy + VisionAdapter real: etiqueta corrupta -> ERROR_VISION y se guarda")
+    void active_strategy_handles_real_vision_exception() {
+        lenient().when(repository.save(any(EventRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+        ActiveStrategy strategy = new ActiveStrategy(repository, new VisionAdapter(), new CommandExecutor(), publisher);
+        EventRecord e = new EventRecord();
+        e.setMode("ACTIVE");
+        e.setDistanceCm(35.0);
+        e.setAiLabels("<script>alert(1)</script>");
 
-        RegistroEvento resultado = strategy.procesar(e);
+        EventRecord outcome = strategy.process(e);
 
-        assertThat(resultado.getEtiquetasIA()).startsWith("ERROR_VISION:");
+        assertThat(outcome.getAiLabels()).startsWith("ERROR_VISION:");
         verify(repository).save(e);
     }
 
     @Test
-    @DisplayName("ComandoConsultarIA coordina con la fachada y propaga VisionException")
-    void comando_consultar_ia_propaga_error() {
-        when(facadeMock.analizarImagen("x")).thenThrow(new VisionException("fallo de visión"));
-        ComandoConsultarIA comando = new ComandoConsultarIA(facadeMock, "x");
+    @DisplayName("QueryAiCommand coordina con la fachada y propaga VisionException")
+    void query_ai_command_propagates_error() {
+        when(facadeMock.analyzeImage("x")).thenThrow(new VisionException("fallo de visión"));
+        QueryAiCommand command = new QueryAiCommand(facadeMock, "x");
 
-        assertThatThrownBy(comando::ejecutar)
+        assertThatThrownBy(command::execute)
                 .isInstanceOf(VisionException.class)
                 .hasMessage("fallo de visión");
     }
@@ -100,9 +100,9 @@ class VisionFacadeTest {
     @Test
     @DisplayName("VisionException conserva la causa original")
     void vision_exception_con_causa() {
-        Throwable causa = new IllegalStateException("origen");
-        VisionException ex = new VisionException("envoltorio", causa);
+        Throwable cause = new IllegalStateException("origen");
+        VisionException ex = new VisionException("envoltorio", cause);
 
-        assertThat(ex).hasMessage("envoltorio").hasCause(causa);
+        assertThat(ex).hasMessage("envoltorio").hasCause(cause);
     }
 }
