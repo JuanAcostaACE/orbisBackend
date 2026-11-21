@@ -1,4 +1,4 @@
-# GET /api/v1/eventos
+# GET /api/v1/events
 
 Lista paginada de los eventos del usuario autenticado. No es posible ver eventos de otro usuario.
 
@@ -16,8 +16,8 @@ Sin sesión responde **401**.
 
 ```json
 {
-  "contenido": [ { "id": 7, "modo": "PASIVO", "distanciaCm": 80.0, "fechaHora": "..." } ],
-  "paginaActual": 0, "tamanioPagina": 20, "totalElementos": 1,
-  "totalPaginas": 1, "primera": true, "ultima": true
+  "content": [ { "id": 7, "mode": "PASSIVE", "distanceCm": 80.0, "createdAt": "..." } ],
+  "currentPage": 0, "pageSize": 20, "totalElements": 1,
+  "totalPages": 1, "first": true, "last": true
 }
 ```

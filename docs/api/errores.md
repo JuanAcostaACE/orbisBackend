@@ -3,7 +3,7 @@
 Todas las respuestas de error tienen la forma:
 
 ```json
-{ "status": 400, "mensaje": "Descripción legible", "timestamp": "2026-11-20T10:00:00" }
+{ "status": 400, "message": "Descripción legible", "timestamp": "2026-11-20T10:00:00" }
 ```
 
 | Código | Origen |
