@@ -30,7 +30,7 @@ Orbis Backend es una API REST construida con Java 21 y Spring Boot 4.1.1. Recibe
 
 | Patron | Descripcion |
 |---|---|
-| **Strategy** | Seleccion dinamica del modo de procesamiento (PASIVO/ACTIVO) |
+| **Strategy** | Seleccion dinamica del modo de procesamiento (PASSIVE/ACTIVE) |
 | **Factory Method** | Creacion desacoplada de strategies |
 | **Facade / Adapter** | Aislamiento de Google Cloud Vision |
 | **Observer** | Notificacion de eventos sin acoplamiento |
@@ -43,10 +43,10 @@ Orbis Backend es una API REST construida con Java 21 y Spring Boot 4.1.1. Recibe
 
 | Metodo | URL | Descripcion |
 |---|---|---|
-| POST | /api/v1/eventos | Recibe evento del ESP32 |
-| GET | /api/v1/eventos | Lista todos los eventos |
-| GET | /api/v1/eventos/{id} | Obtiene evento por ID |
-| GET | /api/v1/eventos/estado | Estado actual del sistema (State pattern) |
+| POST | /api/v1/events | Recibe evento del ESP32 |
+| GET | /api/v1/events | Lista todos los eventos |
+| GET | /api/v1/events/{id} | Obtiene evento por ID |
+| GET | /api/v1/events/status | Estado actual del sistema (State pattern) |
 | GET | /health | Health check |
 
 ---
@@ -69,7 +69,7 @@ cd orbisBackend
 ./mvnw spring-boot:run           # Linux/macOS
 
 # 3. API disponible en:
-# http://localhost:8080/api/v1/eventos
+# http://localhost:8080/api/v1/events
 ```
 
 ### Consola H2 (solo desarrollo explicito)
@@ -94,18 +94,18 @@ No se requiere ninguna variable de entorno para correr en local.
 
 ### Limitador de peticiones (login y registro)
 
-`POST /auth/login` y `POST /auth/registro` tienen un limite por IP con ventana fija
-(en memoria). Al superarlo responde **429** con `{status, mensaje, timestamp}` y la cabecera `Retry-After`.
+`POST /auth/login` y `POST /auth/register` tienen un limite por IP con ventana fija
+(en memoria). Al superarlo responde **429** con `{status, message, timestamp}` y la cabecera `Retry-After`.
 
 | Variable | Por defecto | Descripcion |
 |---|---|---|
 | APP_RATELIMIT_ENABLED | true | Activa o desactiva el limitador |
 | APP_RATELIMIT_LOGIN_MAX | 10 | Intentos de login permitidos por ventana |
-| APP_RATELIMIT_LOGIN_VENTANA | 60 | Duracion de la ventana de login (segundos) |
-| APP_RATELIMIT_REGISTRO_MAX | 10 | Registros permitidos por ventana |
-| APP_RATELIMIT_REGISTRO_VENTANA | 3600 | Duracion de la ventana de registro (segundos) |
-| APP_RATELIMIT_CUENTA_MAX | 5 | Intentos fallidos de login por cuenta (correo normalizado) antes de bloquearla |
-| APP_RATELIMIT_CUENTA_VENTANA | 900 | Ventana del bloqueo por cuenta (segundos). La cuenta queda bloqueada hasta que caduque |
+| APP_RATELIMIT_LOGIN_WINDOW | 60 | Duracion de la ventana de login (segundos) |
+| APP_RATELIMIT_REGISTER_MAX | 10 | Registros permitidos por ventana |
+| APP_RATELIMIT_REGISTER_WINDOW | 3600 | Duracion de la ventana de registro (segundos) |
+| APP_RATELIMIT_ACCOUNT_MAX | 5 | Intentos fallidos de login por cuenta (correo normalizado) antes de bloquearla |
+| APP_RATELIMIT_ACCOUNT_WINDOW | 900 | Ventana del bloqueo por cuenta (segundos). La cuenta queda bloqueada hasta que caduque |
 
 #### Cliente real detras del proxy (X-Real-IP)
 
@@ -136,8 +136,8 @@ a la red privada.
 #### Limite por cuenta (login)
 
 Ademas del limite por IP, `POST /auth/login` cuenta los intentos fallidos por correo normalizado
-(minusculas y sin espacios). Al alcanzar `APP_RATELIMIT_CUENTA_MAX` fallos dentro de
-`APP_RATELIMIT_CUENTA_VENTANA` segundos, la cuenta responde **429** con el mismo cuerpo que el
+(minusculas y sin espacios). Al alcanzar `APP_RATELIMIT_ACCOUNT_MAX` fallos dentro de
+`APP_RATELIMIT_ACCOUNT_WINDOW` segundos, la cuenta responde **429** con el mismo cuerpo que el
 limite por IP, aunque se envie la contrasena correcta. La comprobacion se hace antes de buscar el
 usuario, asi que una cuenta bloqueada y una inexistente responden igual. Un login correcto borra
 el contador. Una IP no bloquea a otras cuentas; una cuenta bloqueada lo esta desde cualquier IP.
@@ -169,7 +169,7 @@ no arranca y el mensaje de error nombra la variable (nunca muestra valores).
 **Comportamiento si `APP_DEVICE_TOKEN` esta vacio o no definido:** la autenticacion de
 dispositivo queda deshabilitada. El arranque no falla; si `APP_DEVICE_OWNER_EMAIL` esta
 definido, se registra un aviso (WARN) porque no tiene efecto. El filtro no autentica ninguna
-peticion con `X-Device-Token`. Sin token valido, `POST /api/v1/eventos` solo acepta una
+peticion con `X-Device-Token`. Sin token valido, `POST /api/v1/events` solo acepta una
 sesion de usuario; el ESP32 recibira 401. Verificar que la variable este definida en cada entorno.
 
 **Propietario no registrado:** si el correo de `APP_DEVICE_OWNER_EMAIL` no corresponde a un
@@ -207,9 +207,16 @@ Sin configuracion. El esquema se crea automaticamente al iniciar.
    - src/main/resources/schema-postgresql.sql
    - src/main/resources/data-postgresql.sql
 
+**Base existente con nombres en español** (`usuarios`, `registro_eventos`, `tipo_obstaculo`):
+antes de desplegar esta version, hacer un backup y ejecutar una vez
+`src/main/resources/migration-english-names.sql`. Renombra tablas y columnas y traduce los
+valores (`PASIVO`/`ACTIVO` → `PASSIVE`/`ACTIVE`, `ALTO`/`MEDIO`/`BAJO` → `HIGH`/`MEDIUM`/`LOW`)
+sin borrar filas. Si el backend nuevo arranca antes, Hibernate crea tablas vacias con los
+nombres nuevos y los datos quedan en las antiguas.
+
 ---
 
-## Configuracion de Google Cloud Vision (solo modo ACTIVO)
+## Configuracion de Google Cloud Vision (solo modo ACTIVE)
 
 1. Crear una cuenta de servicio en Google Cloud Console
 2. Habilitar la API de Cloud Vision
@@ -230,21 +237,21 @@ El archivo `railway.toml` ya esta configurado. Solo necesitas:
 ## Prueba rapida (sin hardware)
 
 ```bash
-# Modo PASIVO — simula obstaculo detectado
-curl -X POST http://localhost:8080/api/v1/eventos \
+# Modo PASSIVE — simula obstaculo detectado
+curl -X POST http://localhost:8080/api/v1/events \
   -H "Content-Type: application/json" \
-  -d '{"modo":"PASIVO","distanciaCm":28.5}'
+  -d '{"mode":"PASSIVE","distanceCm":28.5}'
 
-# Modo ACTIVO — simula analisis de IA
-curl -X POST http://localhost:8080/api/v1/eventos \
+# Modo ACTIVE — simula analisis de IA
+curl -X POST http://localhost:8080/api/v1/events \
   -H "Content-Type: application/json" \
-  -d '{"modo":"ACTIVO","distanciaCm":28.5}'
+  -d '{"mode":"ACTIVE","distanceCm":28.5}'
 
 # Listar todos los eventos
-curl http://localhost:8080/api/v1/eventos
+curl http://localhost:8080/api/v1/events
 
 # Estado del sistema
-curl http://localhost:8080/api/v1/eventos/estado
+curl http://localhost:8080/api/v1/events/status
 ```
 
 ---
@@ -254,17 +261,17 @@ curl http://localhost:8080/api/v1/eventos/estado
 ```
 orbisBackend/
 ├── src/main/java/com/smartcane/api/
-│   ├── controller/     EventoController, GlobalExceptionHandler, HealthController
-│   ├── command/        Comando, ComandoGuardarEvento, ComandoConsultarIA, EjecutorComando
+│   ├── controller/     EventController, GlobalExceptionHandler, HealthController
+│   ├── command/        Command, SaveEventCommand, QueryAiCommand, CommandExecutor
 │   ├── config/         CorsConfig
 │   ├── facade/         VisionFacade, VisionAdapter, VisionException
-│   ├── factory/        CreadorStrategy, StrategyFactory
-│   ├── model/          RegistroEvento, TipoObstaculo
-│   ├── observer/       EventoObserver, EventoRegistradoEvent, LogEventoObserver
-│   ├── repository/     RegistroEventoRepository, TipoObstaculoRepository
-│   ├── service/        EventoService
-│   ├── state/          EstadoSistema, EstadoInactivo, EstadoPasivo, EstadoActivo, ContextoSistema
-│   └── strategy/       ModoProcesamientoStrategy, PasivoStrategy, ActivoStrategy
+│   ├── factory/        StrategyCreator, StrategyFactory
+│   ├── model/          EventRecord, ObstacleType
+│   ├── observer/       EventObserver, EventRecordedEvent, LogEventObserver
+│   ├── repository/     EventRecordRepository, ObstacleTypeRepository
+│   ├── service/        EventService
+│   ├── state/          SystemState, InactiveState, PassiveState, ActiveState, SystemContext
+│   └── strategy/       ProcessingModeStrategy, PassiveStrategy, ActiveStrategy
 ├── src/main/resources/
 │   ├── application.yaml        Configuracion Spring Boot
 │   ├── schema-postgresql.sql   DDL base de datos
