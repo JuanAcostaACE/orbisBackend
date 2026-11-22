@@ -1,7 +1,7 @@
 package com.orbis.api.service;
 
-import com.orbis.api.model.Usuario;
-import com.orbis.api.repository.UsuarioRepository;
+import com.orbis.api.model.UserAccount;
+import com.orbis.api.repository.UserAccountRepository;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -15,20 +15,20 @@ import org.springframework.stereotype.Service;
 @Service
 public class OrbisUserDetailsService implements UserDetailsService {
 
-    private final UsuarioRepository usuarioRepository;
+    private final UserAccountRepository userAccountRepository;
 
-    public OrbisUserDetailsService(UsuarioRepository usuarioRepository) {
-        this.usuarioRepository = usuarioRepository;
+    public OrbisUserDetailsService(UserAccountRepository userAccountRepository) {
+        this.userAccountRepository = userAccountRepository;
     }
 
     @Override
-    public UserDetails loadUserByUsername(String correo) throws UsernameNotFoundException {
-        return usuarioRepository.findByCorreo(correo.toLowerCase())
-                .filter(Usuario::isActivo)
-                .map(u -> User.withUsername(u.getCorreo())
-                        .password(u.getHashContrasena())
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        return userAccountRepository.findByEmail(email.toLowerCase())
+                .filter(UserAccount::isActive)
+                .map(u -> User.withUsername(u.getEmail())
+                        .password(u.getPasswordHash())
                         .roles("USER")
                         .build())
-                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + correo));
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + email));
     }
 }

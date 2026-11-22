@@ -1,7 +1,7 @@
 package com.orbis.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.orbis.api.dto.RegistroRequest;
+import com.orbis.api.dto.RegisterRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,35 +28,35 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DeviceTokenHttpTest {
 
     static final String TOKEN = "token-de-prueba-no-real-0123456789";
-    static final String EVENTO = "{\"modo\":\"PASIVO\",\"distanciaCm\":30.0}";
+    static final String EVENT = "{\"mode\":\"PASSIVE\",\"distanceCm\":30.0}";
 
     @Autowired MockMvc mvc;
     final ObjectMapper mapper = new ObjectMapper();
 
     @Test
-    @DisplayName("POST /api/v1/eventos con device token válido → 201")
-    void device_token_valido_crea_evento() throws Exception {
+    @DisplayName("POST /api/v1/events con device token válido → 201")
+    void device_token_valid_creates_event() throws Exception {
         // El propietario del dispositivo debe existir como usuario
-        mvc.perform(post("/auth/registro")
+        mvc.perform(post("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(mapper.writeValueAsString(new RegistroRequest(
+                .content(mapper.writeValueAsString(new RegisterRequest(
                         "Dueno Dispositivo", "dueno-dispositivo@test.com", "contraseña_segura_123"))))
                 .andExpect(status().isCreated());
 
-        mvc.perform(post("/api/v1/eventos")
+        mvc.perform(post("/api/v1/events")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(EVENTO)
+                .content(EVENT)
                 .header("X-Device-Token", TOKEN))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists());
     }
 
     @Test
-    @DisplayName("POST /api/v1/eventos sin token ni sesión → 401")
-    void sin_token_ni_sesion_401() throws Exception {
-        mvc.perform(post("/api/v1/eventos")
+    @DisplayName("POST /api/v1/events sin token ni sesión → 401")
+    void no_token_or_session_401() throws Exception {
+        mvc.perform(post("/api/v1/events")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(EVENTO))
+                .content(EVENT))
                 .andExpect(status().isUnauthorized());
     }
 }

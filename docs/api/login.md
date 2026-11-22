@@ -5,7 +5,7 @@ Valida credenciales y crea la sesión. Público, sin CSRF.
 ## Cuerpo
 
 ```json
-{ "correo": "ana@ejemplo.com", "contrasena": "minimo8caracteres" }
+{ "email": "ana@ejemplo.com", "password": "minimo8caracteres" }
 ```
 
 ## Respuesta 200
@@ -13,7 +13,7 @@ Valida credenciales y crea la sesión. Público, sin CSRF.
 Envía la cookie `ORBIS_SID` y devuelve:
 
 ```json
-{ "id": 1, "nombre": "Ana Pérez", "correo": "ana@ejemplo.com", "mensaje": "Login exitoso" }
+{ "id": 1, "name": "Ana Pérez", "email": "ana@ejemplo.com", "message": "Login exitoso" }
 ```
 
 ## Errores

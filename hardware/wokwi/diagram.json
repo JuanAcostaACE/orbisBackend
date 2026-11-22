@@ -12,47 +12,47 @@
     },
     {
       "type": "wokwi-hc-sr04",
-      "id": "ultrasonico",
+      "id": "ultrasonic",
       "top": -100,
       "left": 200,
       "attrs": { "distance": "150" }
     },
     {
       "type": "wokwi-pushbutton",
-      "id": "boton",
+      "id": "button",
       "top": 150,
       "left": 220,
       "attrs": { "color": "green" }
     },
     {
       "type": "wokwi-led",
-      "id": "ledEstado",
+      "id": "statusLed",
       "top": 150,
       "left": 320,
       "attrs": { "color": "blue" }
     },
     {
       "type": "wokwi-led",
-      "id": "ledVibrador",
+      "id": "vibratorLed",
       "top": 80,
       "left": 320,
       "attrs": { "color": "red" }
     }
   ],
   "connections": [
-    ["esp32:D5",  "ultrasonico:TRIG", "green", []],
-    ["esp32:D18", "ultrasonico:ECHO", "orange", []],
-    ["ultrasonico:VCC", "esp32:3V3", "red", []],
-    ["ultrasonico:GND", "esp32:GND", "black", []],
+    ["esp32:D5",  "ultrasonic:TRIG", "green", []],
+    ["esp32:D18", "ultrasonic:ECHO", "orange", []],
+    ["ultrasonic:VCC", "esp32:3V3", "red", []],
+    ["ultrasonic:GND", "esp32:GND", "black", []],
 
-    ["esp32:D4",  "boton:1.l", "blue", []],
-    ["boton:2.l", "esp32:GND", "black", []],
+    ["esp32:D4",  "button:1.l", "blue", []],
+    ["button:2.l", "esp32:GND", "black", []],
 
-    ["esp32:D2",  "ledVibrador:A", "red", []],
-    ["ledVibrador:K", "esp32:GND", "black", []],
+    ["esp32:D2",  "vibratorLed:A", "red", []],
+    ["vibratorLed:K", "esp32:GND", "black", []],
 
-    ["esp32:D13", "ledEstado:A", "blue", []],
-    ["ledEstado:K", "esp32:GND", "black", []]
+    ["esp32:D13", "statusLed:A", "blue", []],
+    ["statusLed:K", "esp32:GND", "black", []]
   ],
   "dependencies": {}
 }

@@ -24,8 +24,8 @@ class CorsConfigTest {
 
     @Test
     @DisplayName("Origen permitido recibe Access-Control-Allow-Origin y credenciales")
-    void origen_permitido() throws Exception {
-        mvc.perform(options("/api/v1/eventos")
+    void allowed_origin() throws Exception {
+        mvc.perform(options("/api/v1/events")
                         .header("Origin", "http://localhost:5173")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isOk())
@@ -36,8 +36,8 @@ class CorsConfigTest {
 
     @Test
     @DisplayName("Origen desconocido es rechazado (403)")
-    void origen_desconocido() throws Exception {
-        mvc.perform(options("/api/v1/eventos")
+    void unknown_origin() throws Exception {
+        mvc.perform(options("/api/v1/events")
                         .header("Origin", "https://atacante.example")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isForbidden())
@@ -46,8 +46,8 @@ class CorsConfigTest {
 
     @Test
     @DisplayName("Cabecera no listada es rechazada en el preflight")
-    void cabecera_no_permitida() throws Exception {
-        mvc.perform(options("/api/v1/eventos")
+    void header_not_allowed() throws Exception {
+        mvc.perform(options("/api/v1/events")
                         .header("Origin", "http://localhost:5173")
                         .header("Access-Control-Request-Method", "POST")
                         .header("Access-Control-Request-Headers", "X-Inventada"))

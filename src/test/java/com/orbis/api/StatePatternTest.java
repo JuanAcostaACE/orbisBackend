@@ -1,10 +1,10 @@
 package com.orbis.api;
 
-import com.orbis.api.model.RegistroEvento;
-import com.orbis.api.state.ContextoSistema;
-import com.orbis.api.state.EstadoActivo;
-import com.orbis.api.state.EstadoInactivo;
-import com.orbis.api.state.EstadoPasivo;
+import com.orbis.api.model.EventRecord;
+import com.orbis.api.state.SystemContext;
+import com.orbis.api.state.ActiveState;
+import com.orbis.api.state.InactiveState;
+import com.orbis.api.state.PassiveState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,154 +12,154 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Patrón STATE: transiciones de ContextoSistema entre
- * EstadoInactivo, EstadoPasivo y EstadoActivo.
+ * Patrón STATE: transiciones de SystemContext entre
+ * InactiveState, PassiveState y ActiveState.
  */
 class StatePatternTest {
 
-    private ContextoSistema contexto;
+    private SystemContext context;
 
     @BeforeEach
     void setUp() {
-        contexto = new ContextoSistema(new EstadoInactivo(), new EstadoPasivo(), new EstadoActivo());
+        context = new SystemContext(new InactiveState(), new PassiveState(), new ActiveState());
     }
 
-    private static RegistroEvento evento(String modo, Double distancia) {
-        RegistroEvento e = new RegistroEvento();
-        e.setModo(modo);
-        e.setDistanciaCm(distancia);
+    private static EventRecord event(String mode, Double distance) {
+        EventRecord e = new EventRecord();
+        e.setMode(mode);
+        e.setDistanceCm(distance);
         return e;
     }
 
     // ── Estado inicial y respuestas ───────────────────────────────
 
     @Test
-    @DisplayName("Estado inicial: INACTIVO")
-    void estado_inicial_inactivo() {
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("INACTIVO");
+    @DisplayName("Estado inicial: INACTIVE")
+    void initial_state_inactive() {
+        assertThat(context.getCurrentStateName()).isEqualTo("INACTIVE");
     }
 
     @Test
     @DisplayName("Cada estado responde con su nombre")
-    void nombres_de_estado() {
-        assertThat(new EstadoInactivo().getNombre()).isEqualTo("INACTIVO");
-        assertThat(new EstadoPasivo().getNombre()).isEqualTo("PASIVO");
-        assertThat(new EstadoActivo().getNombre()).isEqualTo("ACTIVO");
+    void state_names() {
+        assertThat(new InactiveState().getName()).isEqualTo("INACTIVE");
+        assertThat(new PassiveState().getName()).isEqualTo("PASSIVE");
+        assertThat(new ActiveState().getName()).isEqualTo("ACTIVE");
     }
 
-    // ── Desde INACTIVO ────────────────────────────────────────────
+    // ── Desde INACTIVE ────────────────────────────────────────────
 
     @Test
-    @DisplayName("INACTIVO + evento PASIVO -> PASIVO")
-    void inactivo_a_pasivo() {
-        contexto.procesarEvento(evento("PASIVO", 40.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("PASIVO");
-    }
-
-    @Test
-    @DisplayName("INACTIVO + evento ACTIVO -> ACTIVO")
-    void inactivo_a_activo() {
-        contexto.procesarEvento(evento("ACTIVO", 40.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("ACTIVO");
+    @DisplayName("INACTIVE + evento PASSIVE -> PASSIVE")
+    void inactive_to_passive() {
+        context.processEvent(event("PASSIVE", 40.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("PASSIVE");
     }
 
     @Test
-    @DisplayName("INACTIVO + modo desconocido o nulo -> permanece INACTIVO")
-    void inactivo_modo_desconocido_permanece() {
-        contexto.procesarEvento(evento("RARO", 40.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("INACTIVO");
+    @DisplayName("INACTIVE + evento ACTIVE -> ACTIVE")
+    void inactive_to_active() {
+        context.processEvent(event("ACTIVE", 40.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("ACTIVE");
+    }
 
-        contexto.procesarEvento(evento(null, 40.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("INACTIVO");
+    @Test
+    @DisplayName("INACTIVE + modo desconocido o nulo -> permanece INACTIVE")
+    void inactive_unknown_mode_stays() {
+        context.processEvent(event("WEIRD", 40.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("INACTIVE");
+
+        context.processEvent(event(null, 40.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("INACTIVE");
     }
 
     @Test
     @DisplayName("El modo se interpreta sin distinguir mayúsculas")
-    void modo_sin_distinguir_mayusculas() {
-        contexto.procesarEvento(evento("pasivo", 40.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("PASIVO");
+    void mode_case_insensitive() {
+        context.processEvent(event("passive", 40.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("PASSIVE");
     }
 
-    // ── Desde PASIVO ──────────────────────────────────────────────
+    // ── Desde PASSIVE ──────────────────────────────────────────────
 
     @Test
-    @DisplayName("PASIVO + evento ACTIVO (botón) -> ACTIVO")
-    void pasivo_a_activo() {
-        contexto.establecerEstado(contexto.getEstadoPasivo());
-        contexto.procesarEvento(evento("ACTIVO", 40.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("ACTIVO");
-    }
-
-    @Test
-    @DisplayName("PASIVO + obstáculo persiste (< umbral de recuperación) -> permanece PASIVO")
-    void pasivo_persiste_si_obstaculo_cerca() {
-        contexto.establecerEstado(contexto.getEstadoPasivo());
-        contexto.procesarEvento(evento("PASIVO", EstadoPasivo.UMBRAL_LIBRE_CM - 0.1));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("PASIVO");
+    @DisplayName("PASSIVE + evento ACTIVE (botón) -> ACTIVE")
+    void passive_to_active() {
+        context.setState(context.getPassiveState());
+        context.processEvent(event("ACTIVE", 40.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("ACTIVE");
     }
 
     @Test
-    @DisplayName("PASIVO + distancia >= umbral de recuperación (115 cm) -> INACTIVO")
-    void pasivo_a_inactivo_cuando_despeja() {
-        contexto.establecerEstado(contexto.getEstadoPasivo());
-        contexto.procesarEvento(evento("PASIVO", EstadoPasivo.UMBRAL_LIBRE_CM));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("INACTIVO");
+    @DisplayName("PASSIVE + obstáculo persiste (< umbral de recuperación) -> permanece PASSIVE")
+    void passive_persists_if_obstacle_near() {
+        context.setState(context.getPassiveState());
+        context.processEvent(event("PASSIVE", PassiveState.CLEAR_THRESHOLD_CM - 0.1));
+        assertThat(context.getCurrentStateName()).isEqualTo("PASSIVE");
+    }
+
+    @Test
+    @DisplayName("PASSIVE + distancia >= umbral de recuperación (115 cm) -> INACTIVE")
+    void passive_to_inactive_when_clear() {
+        context.setState(context.getPassiveState());
+        context.processEvent(event("PASSIVE", PassiveState.CLEAR_THRESHOLD_CM));
+        assertThat(context.getCurrentStateName()).isEqualTo("INACTIVE");
     }
 
     @Test
     @DisplayName("El umbral de recuperación del backend coincide con firmware/simulador (115 cm)")
-    void umbral_alineado_con_histeresis() {
-        assertThat(EstadoPasivo.UMBRAL_LIBRE_CM).isEqualTo(115.0);
+    void threshold_aligned_with_hysteresis() {
+        assertThat(PassiveState.CLEAR_THRESHOLD_CM).isEqualTo(115.0);
     }
 
     @Test
-    @DisplayName("PASIVO + distancia nula -> permanece PASIVO")
-    void pasivo_distancia_nula_permanece() {
-        contexto.establecerEstado(contexto.getEstadoPasivo());
-        contexto.procesarEvento(evento("PASIVO", null));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("PASIVO");
+    @DisplayName("PASSIVE + distancia nula -> permanece PASSIVE")
+    void passive_null_distance_stays() {
+        context.setState(context.getPassiveState());
+        context.processEvent(event("PASSIVE", null));
+        assertThat(context.getCurrentStateName()).isEqualTo("PASSIVE");
     }
 
-    // ── Desde ACTIVO ──────────────────────────────────────────────
+    // ── Desde ACTIVE ──────────────────────────────────────────────
 
     @Test
-    @DisplayName("ACTIVO + cualquier evento -> INACTIVO (análisis completado)")
-    void activo_vuelve_a_inactivo() {
-        contexto.establecerEstado(contexto.getEstadoActivo());
-        contexto.procesarEvento(evento("ACTIVO", 40.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("INACTIVO");
+    @DisplayName("ACTIVE + cualquier evento -> INACTIVE (análisis completado)")
+    void active_returns_to_inactive() {
+        context.setState(context.getActiveState());
+        context.processEvent(event("ACTIVE", 40.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("INACTIVE");
 
-        contexto.establecerEstado(contexto.getEstadoActivo());
-        contexto.procesarEvento(evento("PASIVO", 10.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("INACTIVO");
+        context.setState(context.getActiveState());
+        context.processEvent(event("PASSIVE", 10.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("INACTIVE");
     }
 
     // ── Ciclo completo ────────────────────────────────────────────
 
     @Test
-    @DisplayName("Ciclo: INACTIVO -> PASIVO -> ACTIVO -> INACTIVO -> PASIVO -> INACTIVO")
-    void ciclo_completo() {
-        contexto.procesarEvento(evento("PASIVO", 30.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("PASIVO");
+    @DisplayName("Ciclo: INACTIVE -> PASSIVE -> ACTIVE -> INACTIVE -> PASSIVE -> INACTIVE")
+    void full_cycle() {
+        context.processEvent(event("PASSIVE", 30.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("PASSIVE");
 
-        contexto.procesarEvento(evento("ACTIVO", 30.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("ACTIVO");
+        context.processEvent(event("ACTIVE", 30.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("ACTIVE");
 
-        contexto.procesarEvento(evento("ACTIVO", 30.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("INACTIVO");
+        context.processEvent(event("ACTIVE", 30.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("INACTIVE");
 
-        contexto.procesarEvento(evento("PASIVO", 30.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("PASIVO");
+        context.processEvent(event("PASSIVE", 30.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("PASSIVE");
 
-        contexto.procesarEvento(evento("PASIVO", 200.0));
-        assertThat(contexto.getNombreEstadoActual()).isEqualTo("INACTIVO");
+        context.processEvent(event("PASSIVE", 200.0));
+        assertThat(context.getCurrentStateName()).isEqualTo("INACTIVE");
     }
 
     @Test
     @DisplayName("El contexto expone los tres estados concretos")
-    void contexto_expone_estados() {
-        assertThat(contexto.getEstadoInactivo()).isInstanceOf(EstadoInactivo.class);
-        assertThat(contexto.getEstadoPasivo()).isInstanceOf(EstadoPasivo.class);
-        assertThat(contexto.getEstadoActivo()).isInstanceOf(EstadoActivo.class);
+    void context_exposes_states() {
+        assertThat(context.getInactiveState()).isInstanceOf(InactiveState.class);
+        assertThat(context.getPassiveState()).isInstanceOf(PassiveState.class);
+        assertThat(context.getActiveState()).isInstanceOf(ActiveState.class);
     }
 }

@@ -2,11 +2,11 @@ package com.orbis.api.controller;
 
 import com.orbis.api.dto.AuthResponse;
 import com.orbis.api.dto.LoginRequest;
-import com.orbis.api.dto.RegistroRequest;
-import com.orbis.api.dto.RegistroResponse;
+import com.orbis.api.dto.RegisterRequest;
+import com.orbis.api.dto.RegisterResponse;
 import com.orbis.api.service.AuthService;
-import com.orbis.api.service.BloqueoCuentaService;
-import com.orbis.api.service.CuentaBloqueadaException;
+import com.orbis.api.service.AccountLockoutService;
+import com.orbis.api.service.AccountLockedException;
 import org.springframework.security.core.AuthenticationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -29,7 +29,7 @@ import java.util.Map;
 
 /**
  * Endpoints de autenticación.
- * Públicos: /auth/registro, /auth/login.
+ * Públicos: /auth/register, /auth/login.
  * Autenticado: /auth/logout, /auth/me.
  */
 @RestController
@@ -38,22 +38,22 @@ public class AuthController {
 
     private final AuthService           authService;
     private final AuthenticationManager authManager;
-    private final BloqueoCuentaService  bloqueoCuenta;
-    private final String  cookieNombre;
+    private final AccountLockoutService  accountLockout;
+    private final String  cookieName;
     private final boolean cookieSecure;
     private final String  cookieSameSite;
 
     public AuthController(
             AuthService authService,
             AuthenticationManager authManager,
-            BloqueoCuentaService bloqueoCuenta,
-            @Value("${server.servlet.session.cookie.name:ORBIS_SID}") String cookieNombre,
+            AccountLockoutService accountLockout,
+            @Value("${server.servlet.session.cookie.name:ORBIS_SID}") String cookieName,
             @Value("${server.servlet.session.cookie.secure:false}") boolean cookieSecure,
             @Value("${server.servlet.session.cookie.same-site:Strict}") String cookieSameSite) {
         this.authService = authService;
         this.authManager = authManager;
-        this.bloqueoCuenta = bloqueoCuenta;
-        this.cookieNombre = cookieNombre;
+        this.accountLockout = accountLockout;
+        this.cookieName = cookieName;
         this.cookieSecure = cookieSecure;
         this.cookieSameSite = cookieSameSite;
     }
@@ -62,10 +62,10 @@ public class AuthController {
      * Registro anti-enumeración: 201 con el mismo cuerpo exista o no el correo.
      * Los datos inválidos siguen devolviendo 400 (no revelan existencia).
      */
-    @PostMapping("/registro")
-    public ResponseEntity<RegistroResponse> registro(
-            @Valid @RequestBody RegistroRequest request) {
-        RegistroResponse response = authService.registrar(request);
+    @PostMapping("/register")
+    public ResponseEntity<RegisterResponse> register(
+            @Valid @RequestBody RegisterRequest request) {
+        RegisterResponse response = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -77,24 +77,24 @@ public class AuthController {
 
         // 0. Límite por cuenta: se comprueba ANTES de buscar el usuario, así una cuenta
         //    bloqueada y una inexistente responden igual (429, mismo cuerpo).
-        String correo = AuthService.normalizarCorreo(request.correo());
-        long segundosBloqueo = bloqueoCuenta.segundosBloqueo(correo);
-        if (segundosBloqueo > 0) {
-            throw new CuentaBloqueadaException(segundosBloqueo);
+        String email = AuthService.normalizeEmail(request.email());
+        long lockoutSeconds = accountLockout.lockoutSeconds(email);
+        if (lockoutSeconds > 0) {
+            throw new AccountLockedException(lockoutSeconds);
         }
 
         // 1. Autenticar con Spring Security. Cada fallo cuenta para la cuenta.
         Authentication auth;
         try {
             auth = authManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.correo(), request.contrasena())
+                    new UsernamePasswordAuthenticationToken(request.email(), request.password())
             );
         } catch (AuthenticationException e) {
-            bloqueoCuenta.registrarFallo(correo);
+            accountLockout.recordFailure(email);
             throw e;
         }
         // Login correcto: se borra el contador de la cuenta
-        bloqueoCuenta.limpiar(correo);
+        accountLockout.clear(email);
 
         // 2. Protección contra session fixation: si ya existía una sesión (p. ej. anónima
         //    o creada por un atacante), se cambia su ID antes de asociarla al usuario.
@@ -115,7 +115,7 @@ public class AuthController {
         session.setMaxInactiveInterval(8 * 3600);
 
         // 3. Devolver datos del usuario (sin contraseña)
-        AuthResponse response = authService.validarCredenciales(request);
+        AuthResponse response = authService.validateCredentials(request);
         return ResponseEntity.ok(response);
     }
 
@@ -130,7 +130,7 @@ public class AuthController {
         if (session != null) session.invalidate();
         SecurityContextHolder.clearContext();
 
-        ResponseCookie cookieExpirada = ResponseCookie.from(cookieNombre, "")
+        ResponseCookie expiredCookie = ResponseCookie.from(cookieName, "")
                 .path("/")
                 .httpOnly(true)
                 .secure(cookieSecure)
@@ -138,8 +138,8 @@ public class AuthController {
                 .maxAge(0)
                 .build();
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, cookieExpirada.toString())
-                .body(Map.of("mensaje", "Sesión cerrada correctamente"));
+                .header(HttpHeaders.SET_COOKIE, expiredCookie.toString())
+                .body(Map.of("message", "Sesión cerrada correctamente"));
     }
 
     /** Devuelve el usuario actualmente autenticado. */
@@ -148,6 +148,6 @@ public class AuthController {
         if (auth == null || !auth.isAuthenticated()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return ResponseEntity.ok(Map.of("correo", auth.getName()));
+        return ResponseEntity.ok(Map.of("email", auth.getName()));
     }
 }

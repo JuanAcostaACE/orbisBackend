@@ -6,17 +6,17 @@
 
 -- Catálogo inicial de tipos de obstáculo
 -- (Las etiquetas coinciden con las que puede retornar Google Vision)
-INSERT INTO tipo_obstaculo (etiqueta, nivel_peligro) VALUES
-    ('Stairs',      'ALTO'),
-    ('Step',        'ALTO'),
-    ('Curb',        'ALTO'),
-    ('Door',        'MEDIO'),
-    ('Wall',        'MEDIO'),
-    ('Pillar',      'MEDIO'),
-    ('Chair',       'BAJO'),
-    ('Table',       'BAJO'),
-    ('Person',      'BAJO'),
-    ('Bicycle',     'BAJO'),
-    ('Car',         'ALTO'),
-    ('Motorcycle',  'ALTO')
-ON CONFLICT (etiqueta) DO NOTHING;
+INSERT INTO obstacle_types (label, danger_level) VALUES
+    ('Stairs',      'HIGH'),
+    ('Step',        'HIGH'),
+    ('Curb',        'HIGH'),
+    ('Door',        'MEDIUM'),
+    ('Wall',        'MEDIUM'),
+    ('Pillar',      'MEDIUM'),
+    ('Chair',       'LOW'),
+    ('Table',       'LOW'),
+    ('Person',      'LOW'),
+    ('Bicycle',     'LOW'),
+    ('Car',         'HIGH'),
+    ('Motorcycle',  'HIGH')
+ON CONFLICT (label) DO NOTHING;

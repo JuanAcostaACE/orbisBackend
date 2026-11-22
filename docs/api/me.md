@@ -5,7 +5,7 @@ Devuelve el usuario de la sesión actual. Lo usa el frontend al cargar para sabe
 ## Respuesta 200
 
 ```json
-{ "correo": "ana@ejemplo.com" }
+{ "email": "ana@ejemplo.com" }
 ```
 
 ## Errores

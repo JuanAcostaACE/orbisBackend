@@ -1,5 +1,11 @@
 # PostgreSQL local para pruebas del backend
 
+> **Nota (renombrado a inglés):** este documento registra una verificación hecha con los nombres
+> anteriores en español (`usuarios`, `registro_eventos`, `tipo_obstaculo`, `/auth/registro`, ...).
+> Los nombres actuales son `users`, `event_records`, `obstacle_types`, `/auth/register` y
+> `/api/v1/events`. Para migrar una base existente ver `src/main/resources/migration-english-names.sql`.
+
+
 > **Estado de verificacion: NO VERIFICADO.** En el entorno donde se preparo esta guia
 > no habia Docker, `psql` ni nada escuchando en el puerto 5432 (ver seccion 1).
 > Ningun comando de este documento se ha ejecutado contra PostgreSQL. Los comandos

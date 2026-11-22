@@ -30,7 +30,7 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
  *
  * CSRF:
  *  - Habilitado para mutaciones de usuarios web (SPA lee XSRF-TOKEN).
- *  - Deshabilitado para /auth/** (sin sesión previa) y /api/v1/eventos (POST del ESP32).
+ *  - Deshabilitado para /auth/** (sin sesión previa) y /api/v1/events (POST del ESP32).
  *
  * Roles:
  *  - ROLE_USER  → usuarios registrados (web).
@@ -44,18 +44,18 @@ public class SecurityConfig {
     private final CorsConfigurationSource  corsConfigurationSource;
     private final DeviceTokenFilter        deviceTokenFilter;
     private final RateLimitFilter          rateLimitFilter;
-    private final boolean                  h2ConsolaHabilitada;
+    private final boolean                  h2ConsoleEnabled;
 
     public SecurityConfig(OrbisUserDetailsService userDetailsService,
                           CorsConfigurationSource corsConfigurationSource,
                           DeviceTokenFilter       deviceTokenFilter,
                           RateLimitFilter         rateLimitFilter,
-                          @Value("${spring.h2.console.enabled:false}") boolean h2ConsolaHabilitada) {
+                          @Value("${spring.h2.console.enabled:false}") boolean h2ConsoleEnabled) {
         this.userDetailsService     = userDetailsService;
         this.corsConfigurationSource = corsConfigurationSource;
         this.deviceTokenFilter      = deviceTokenFilter;
         this.rateLimitFilter        = rateLimitFilter;
-        this.h2ConsolaHabilitada    = h2ConsolaHabilitada;
+        this.h2ConsoleEnabled    = h2ConsoleEnabled;
     }
 
     @Bean
@@ -83,9 +83,9 @@ public class SecurityConfig {
                 )
                 // Ignorar CSRF para:
                 //   /auth/**       → aún no hay sesión en registro/login
-                //   /api/v1/eventos POST → ESP32 usa token propio (no navegador)
+                //   /api/v1/events POST → ESP32 usa token propio (no navegador)
                 //   /health        → endpoint de monitoreo
-                .ignoringRequestMatchers("/auth/**", "/api/v1/eventos", "/health")
+                .ignoringRequestMatchers("/auth/**", "/api/v1/events", "/health")
             )
 
             // Sesión solo para usuarios web (no para el dispositivo)
@@ -99,11 +99,11 @@ public class SecurityConfig {
                 // Endpoints públicos mínimos
                 auth.requestMatchers("/auth/**", "/health").permitAll();
                 // Consola H2: solo si el perfil dev la activa explícitamente
-                if (h2ConsolaHabilitada) {
+                if (h2ConsoleEnabled) {
                     auth.requestMatchers("/h2-console/**").permitAll();
                 }
                 // Ingesta del ESP32: requiere ROLE_DEVICE (token) o ROLE_USER (sesión)
-                auth.requestMatchers(HttpMethod.POST, "/api/v1/eventos").hasAnyRole("DEVICE", "USER");
+                auth.requestMatchers(HttpMethod.POST, "/api/v1/events").hasAnyRole("DEVICE", "USER");
                 // Todo lo demás: solo usuarios web autenticados
                 auth.anyRequest().authenticated();
             })
@@ -122,14 +122,14 @@ public class SecurityConfig {
                     res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     res.setContentType("application/json;charset=UTF-8");
                     res.getWriter().write(
-                        "{\"status\":401,\"mensaje\":\"Se requiere autenticaci\u00f3n\"}"
+                        "{\"status\":401,\"message\":\"Se requiere autenticaci\u00f3n\"}"
                     );
                 })
                 .accessDeniedHandler((req, res, e) -> {
                     res.setStatus(HttpServletResponse.SC_FORBIDDEN);
                     res.setContentType("application/json;charset=UTF-8");
                     res.getWriter().write(
-                        "{\"status\":403,\"mensaje\":\"Acceso no autorizado\"}"
+                        "{\"status\":403,\"message\":\"Acceso no autorizado\"}"
                     );
                 })
             )
