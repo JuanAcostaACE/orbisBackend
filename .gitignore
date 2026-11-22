@@ -51,3 +51,4 @@ gcp-key.json
 hardware/**/secrets.h
 .DS_Store
 Thumbs.db
+*.log
