@@ -294,7 +294,7 @@ orbisBackend/
 - CORS con orígenes, métodos y cabeceras explícitos.
 - Cabeceras HSTS, nosniff, Referrer-Policy, Permissions-Policy y CSP.
 - Errores en JSON sin trazas internas (400/401/403/404/405/500).
-- CI con permisos mínimos, Dependabot y CodeQL.
+- CI con permisos mínimos y CodeQL.
 
 Detalles y cómo reportar vulnerabilidades: [SECURITY.md](SECURITY.md).
 

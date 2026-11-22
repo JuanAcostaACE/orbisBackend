@@ -27,7 +27,7 @@ Respondemos en un plazo de 5 días hábiles.
 | CORS | Orígenes, métodos y cabeceras explícitos |
 | Cabeceras | HSTS, nosniff, Referrer-Policy, Permissions-Policy, CSP |
 | Errores | Respuestas JSON sin trazas ni mensajes internos |
-| Dependencias | Dependabot semanal y CodeQL |
+| Dependencias | CodeQL |
 
 ## Secretos
 
