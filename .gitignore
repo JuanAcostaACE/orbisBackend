@@ -50,3 +50,4 @@ gcp-key.json
 *.keystore
 hardware/**/secrets.h
 .DS_Store
+Thumbs.db
