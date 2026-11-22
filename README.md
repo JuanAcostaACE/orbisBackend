@@ -121,6 +121,14 @@ SPRING_PROFILES_ACTIVE=dev H2_CONSOLE_ENABLED=true ./mvnw spring-boot:run
 
 En `prod` la consola siempre está desactivada. La base H2 en memoria sigue siendo el almacenamiento local por defecto.
 
+### Ejecutar las pruebas
+
+```bash
+./mvnw test
+```
+
+En Windows, usa `.\mvnw.cmd test`.
+
 ---
 
 ## 🧪 Prueba rápida (sin hardware)
