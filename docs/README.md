@@ -10,3 +10,8 @@ Este directorio reúne las guías operativas y las referencias técnicas del bac
 
 - [Despliegue y CI](ci-despliegue.md)
 - [Operación y seguridad](operacion-seguridad.md)
+
+## Infraestructura
+
+- [PostgreSQL local](postgresql-local.md)
+- [Proxy de Railway](proxy-railway.md)
