@@ -1,6 +1,6 @@
 ﻿<div align="center">
 
-# 🦯 Orbis Backend
+# 🦯 Orbis Backen
 
 **API REST de Orbis: tecnología asistiva IoT para personas con discapacidad visual (bastón inteligente con IA).**
 
