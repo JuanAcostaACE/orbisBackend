@@ -49,3 +49,4 @@ gcp-key.json
 *.jks
 *.keystore
 hardware/**/secrets.h
+.DS_Store
