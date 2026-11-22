@@ -5,3 +5,8 @@ Este directorio reúne las guías operativas y las referencias técnicas del bac
 ## API
 
 - [Referencia de endpoints](api/README.md)
+
+## Operación
+
+- [Despliegue y CI](ci-despliegue.md)
+- [Operación y seguridad](operacion-seguridad.md)
