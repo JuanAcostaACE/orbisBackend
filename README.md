@@ -9,7 +9,7 @@ API REST para **Orbis** — sistema de tecnologia asistiva IoT para personas con
 
 ## Descripcion
 
-orbis Backend es una API REST construida con Java 21 y Spring Boot 4.1.1. Recibe eventos del hardware ESP32 (bastón inteligente), los procesa usando Google Cloud Vision API para analizar imagenes, y los persiste en PostgreSQL. Expone endpoints REST consumidos por el frontend web.
+Orbis Backend es una API REST construida con Java 21 y Spring Boot 4.1.1. Recibe eventos del hardware ESP32 (bastón inteligente), los procesa usando Google Cloud Vision API para analizar imagenes, y los persiste en PostgreSQL. Expone endpoints REST consumidos por el frontend web.
 
 ---
 
